@@ -1,0 +1,108 @@
+%%
+%% This is file `expl3.sty',
+%% generated with the docstrip utility.
+%%
+%% The original source files were:
+%%
+%% expl3.dtx  (with options: `package')
+%% 
+%% 
+%% EXPERIMENTAL CODE
+%% 
+%% Do not distribute this file without also distributing the
+%% source files specified above.
+%% 
+%% Do not distribute a modified version of this file.
+%% 
+%% 
+%% File: expl3.dtx Copyright (C) 1990-2009 LaTeX3 project
+%%
+%% It may be distributed and/or modified under the conditions of the
+%% LaTeX Project Public License (LPPL), either version 1.3c of this
+%% license or (at your option) any later version.  The latest version
+%% of this license is in the file
+%%
+%%    http://www.latex-project.org/lppl.txt
+%%
+%% This file is part of the ``expl3 bundle'' (The Work in LPPL)
+%% and all files in that bundle must be distributed together.
+%%
+%% The released version of this bundle is available from CTAN.
+%%
+%% -----------------------------------------------------------------------
+%%
+%% The development version of the bundle can be found at
+%%
+%%    http://www.latex-project.org/svnroot/experimental/trunk/
+
+%%
+%% for those people who are interested.
+%%
+%%%%%%%%%%%
+%% NOTE: %%
+%%%%%%%%%%%
+%%
+%%   Snapshots taken from the repository represent work in progress and may
+%%   not work or may contain conflicting material!  We therefore ask
+%%   people _not_ to put them into distributions, archives, etc. without
+%%   prior consultation with the LaTeX Project Team.
+%%
+%% -----------------------------------------------------------------------
+\RequirePackage{l3names}
+%\GetIdInfo$Id: expl3.dtx 1982 2010-07-13 07:16:14Z joseph $
+%       {L3 Experimental code bundle wrapper}%
+%\ProvidesExplPackage
+%  {\filename}{\filedate}{\fileversion}{\filedescription}
+\RequirePackage{etex}
+\newcommand*\@l@expl@check@declarations@bool{0}
+\newcommand*\@l@expl@log@functions@bool{0}
+\DeclareOption{check-declarations}{
+  \def\@l@expl@check@declarations@bool{1}
+}
+\DeclareOption{log-functions}{
+  \def\@l@expl@log@functions@bool{1}
+}
+\ProcessOptions\relax
+\RequirePackage{
+  l3basics,
+  l3expan,
+  l3tl,
+  l3intexpr,
+  l3quark,
+  l3seq,
+  l3toks,
+  l3int,
+  l3prg,
+  l3clist,
+  l3token,
+  l3prop,
+  l3msg,
+  l3io,
+  l3skip,
+}
+\RequirePackage{
+  l3box,
+  l3keyval,
+  l3keys,
+  l3precom,
+  l3xref,
+  l3file,
+  l3fp,
+}
+\RequirePackage{calc}
+\bool_if:nT { \@l@expl@check@declarations@bool } {
+  \msg_kernel_new:nnnn { check } { non-declared-variable }
+    { The~variable~#1~has~not~been~declared~\msg_line_context:. }
+    {
+      Checking~is~active,~and~you~have~tried~do~so~something~like: \\
+      \c_space_tl \c_space_tl \tl_set:Nn #1 ~
+        \iow_char:N \{ ~ ... ~ \iow_char:N \} \\
+      without~first~having: \\
+      \c_space_tl \c_space_tl \tl_new:N #1  \\
+      \\
+      LaTeX~will~create~the~variable~and~continue.
+    }
+}
+%% 
+%%
+%% End of file `expl3.sty'.

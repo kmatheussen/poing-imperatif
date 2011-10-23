@@ -1,0 +1,478 @@
+
+
+
+
+
+(parser <program>
+        #\Escape                    := []
+        <program-element> <program> := [<program-element> | <program>])
+
+(parser <program-element>
+        <class>;
+        <hex-number>;
+        -*-;)
+
+(parser <class>
+        "class" <class-name> <class-args>  "{" <class-elems> := [class <class-name> <class-args>
+                                                                       | <class-elems>]
+        "class" <class-name> <class-args> -*- := (parse-error P (<-> "Expected {. Found '" -*- "'"))
+        "class" <class-name> -*-              := (parse-error P (<-> "Expected { or (. Found '" -*- "'"))
+        "class" <reserved>                    := (parse-error-reserved P <reserved> "class")
+        "class" -*-                           := (parse-error P (<-> "Expected a name after 'class'. Found '" -*- "'")))
+
+
+(parser <class-elems>
+        <class-elem> <class-elems> := [<class-elem> | <class-elems>]
+        "}"                        := []        
+        -*-                        := (parse-error P (<-> "Unexpected class element: '" -*- "'")))
+
+ 
+\  class_elem   = array_decl | object_decl | method | imp_code . \     
+(parser <class-elem>
+        <array-decl>;
+        <object-decl>;
+        <method>;
+        <statm>;)
+
+
+(parser <class-args>
+        "(" <var-list> ")" := <var-list>
+        "(" <var-list> -*- := (parse-error P (<-> "Expected ), found '" -*- "'"))
+        "("                := (parse-error P "Syntax error while parsing class arguments.")
+        <e>                := []) \ Dropping () is allowed. \
+
+
+
+\ var_list     = var {"," var} . \
+(parser <var-list>
+        <var> "," <var-list> := [<var> | <var-list>]
+        <var>                := [<var>]
+        <e>                  := [])
+
+
+\   var          = [number_type] varname . \                  
+(parser <var>
+        <number-type> <var-name> := [<number-type> <var-name>]
+        <number-type> <reserved> := (parse-error-reserved P <reserved> "variable")
+        <number-type> -*-        := (parse-error P (<-> "Expected variable name after '" <number-type> "'. Found '" -*- "'"))
+        <var-name>               := [unknown <var-name>])
+
+
+
+(parser <number-type>
+        "float" := float
+        "int"   := int)
+
+
+
+\ array_decl   = number_type arrayname "[" expr "]" ["=" expr] ";" \
+(parser <array-decl>
+   <number-type> <array-name> "[" "0" "]"                                       := (parse-error P "Array size can not be 0")
+   <number-type> <array-name> "[" Size/<expr-bracket> "=" Init/<expr-semicolon> := [array <number-type> <array-name> Size Init]
+   "int"         <array-name> "[" Size/<expr-bracket>                ";"        := [array int <array-name> Size 0]
+   "float"       <array-name> "[" Size/<expr-bracket>                ";"        := [array float <array-name> Size 0.0])
+
+
+
+\ object_decl  = classname objectname ["(" [expr] ")"] ";" . \
+(parser <object-decl>
+        <class-name> <object-name>                     ";" := [object-decl <class-name> <object-name> []]
+        <class-name> <object-name> "(" Args/<expr-par> ";" := [object-decl <class-name> <object-name> Args]
+        <class-name> <object-name> "(" Args/<expr-par> -*- := (parse-error P (<-> "expected ; after object declaration. Found '"
+                                                                                  -*- "'. (missing right paranthesis?)")))
+
+
+\
+method       = [number_type] methodname "(" [var_list] ")"
+               "{"
+                  {imp_code} 
+               "}" .
+(track <object-decl>)
+(track <number-type>)
+(parser-compile <object-decl> ["int" "c__asd" ";"])
+\
+
+(parser <method>
+        <number-type> <method0>; \ Return type for methods are currently ignored. \
+        <method0>;)
+
+(parser <method0>
+        <method-name> "(" <var-list> ")" <block> := [method <method-name> <var-list> | (tail <block>)]
+        <method-name> "(" <var-list> ")"         := (parse-error P "Expected { when parsing method.")
+        <method-name> "(" <var-list>             := (parse-error P "Expected )"))
+\        <method-name>                            := (parse-error P "Expected left paranthesis after method name")) \
+
+
+
+
+(set expr-end-stack [#\Escape])
+(define push-expr-end
+  A -> (set expr-end-stack [A|(value expr-end-stack)]))
+(define peak-expr-end
+  -> (head (value expr-end-stack)))
+(define pop-expr-end
+  -> (set expr-end-stack (tail (value expr-end-stack))))
+
+
+\
+expr         = faust_expression | inc_assign | dec_assign | class
+             | method_call | object_var | array_ref .
+\
+(parser <expr-element>
+        \
+        "("              <expr-par>  := [p-par | <expr-par>]
+        "with"       "{" <expr-curl> := [p-with | <expr-curl>]
+        "definition" "{" <expr-curl> := [p-definition | <expr-curl>]
+        \
+        <inc-assign-expr>;
+        <dec-assign-expr>;
+        <class>;
+        <method-call-expr>;
+        <object-var>;
+        <array-ref>;
+        <hex-number>;
+        -*-;)             \ Pure Faust code is included unmodified. \
+
+
+\ <expr> is only called from <expr>-end and itself. \
+(parser <expr>
+        (peak-expr-end)           := (do (pop-expr-end) [])
+        #\Escape                  := [(@p "Reached end of file")]
+
+        "(" <expr-par> <expr>     := ["("   ,(tail <expr-par>)     ")" ,<expr>]
+        ")"                       := [(@p "Unexpected )")]
+
+        "{" <expr-curl> <expr>    := ["{"   ,(tail <expr-curl>)    "}" ,<expr>]
+        "}"                       := [(@p "Unexpected }")]
+
+        "[" <expr-bracket> <expr> := ["["   ,(tail <expr-bracket>) "]" ,<expr>]
+        "]"                       := [(@p "Unexpected ]")]
+
+        <expr-element> <expr>     := [<expr-element> | <expr>])
+
+
+
+(define <expr>-end
+  Peak P End -> (do (push-expr-end End)
+                    (let Ln   (p->line-number P)
+                         Ret  (<expr> Peak P) \ <expr> never returns #Escape \
+                         P    (fst Ret)
+                         Expr (snd Ret)
+                         Last (last Expr)
+                         (if (tuple? Last)
+                             (parse-error P (<-> (fst Last) " while searching for " End ". "
+                                                 "Started searching from line " Ln))
+                             (@p P [expr | Expr])))))
+(define <expr-bracket>
+  Peak P -> (<expr>-end Peak P "]"))
+
+(define <expr-par>
+  Peak P -> (<expr>-end Peak P ")"))
+
+(define <expr-curl>
+  Peak P -> (<expr>-end Peak P "}"))
+
+(define <expr-semicolon>
+  Peak P -> (<expr>-end Peak P ";"))
+
+
+
+(parser <hex-number>
+        "0" -*- := (if (hex-string? (<-> "o" -*-)) \ CL uses o instead of 0 to identify hex numbers \
+                       (hex-string-to-dec (<-> "o" -*-))
+                       #\Escape))
+\
+(parser-compile <hex-number> ["0" "x12"])
+\
+
+
+
+\object_var   = objectname "." varname . \
+(parser <object-var>
+        <object-name> "." <var-name> := [e-object-var <object-name> <var-name>])
+
+
+
+\ array_ref    = arrayname "[" expr "]" . \
+(parser <array-ref>
+        <array-name> "[" <expr-bracket> := [e-array-ref <array-name> <expr-bracket>])
+
+        
+
+\ block        = "{" {imp_code} "}" . \
+(parser <block>
+        "{" <statms> := [block | <statms>])
+
+
+
+(parser <statms>
+        <statm> <statms> := [<statm> | <statms>]
+        "}"              := []
+        -*-              := (parse-error P (<-> "Unexpected block element: '" -*- "'")))
+
+
+\
+imp_code     = method_call ";" | block | single_decl 
+             | if | return | assignment .
+\
+(parser <statm>
+        ";"                             := (parse-error P "Superfluous semicolon") \ For now. In the future: just ignore. \
+        <method-call-statm>;
+        <block>;
+        <single-decl>;
+        <if>;
+        <return>;
+        <assignment>;
+        <object-name> "." <method-name> := (parse-error P (<-> "Syntax error after " <object-name> "." <method-name>))
+        <number-type> <var-name> -*-    := (parse-error P (<-> "Expected ';', '[', or '=' after "
+                                                               "'" <number-type> " " <var-name> "'. Found '" -*- "'"))
+        <number-type> <reserved>        := (parse-error-reserved P <reserved> "variable")
+        <number-type> -*-               := (parse-error P (<-> "Expected a variable name after "
+                                                               "'" <number-type> "'. Found '" -*- "'")))
+
+
+(parser <method-call-expr>
+        <method-call>     := [e-method-call | <method-call>])
+
+(parser <method-call-statm>
+        <method-call> ";" := [method-call   | <method-call>])
+
+\method_call  = [objectname | "this"] "." methodname "(" [expr] ")" . \
+(parser <method-call>
+        <object-name> "." <method-name> "(" <expr-par> := [<object-name> <method-name> <expr-par>]
+                          <method-name> "(" <expr-par> := [this          <method-name> <expr-par>])
+
+
+
+\ single_decl  = number_type name_list ["=" expr] ";" . \
+(parser <single-decl>
+        <number-type> <name-list>                      ";" := [single-decl <number-type> <name-list>]
+        <number-type> <name-list> "=" <expr-semicolon>     := [single-decl <number-type> <name-list> <expr-semicolon>]
+        <number-type> <name-list> -*-                      := (parse-error P (<-> "Expecting ; or = after declaration. "
+                                                                                      "Found '" -*- "': '"
+                                                                                      <number-type>" "<name-list>" " -*- "'")))
+
+\ if           = "if" "(" expr ")" imp_code ["else" imp_code] . \
+(parser <if>
+        "if" "(" <expr-par> B1/<statm> "else" B2/<statm> := [if <expr-par> B1 B2]
+        "if" "(" <expr-par> B1/<statm> "else" -*-        := (parse-error P (<-> "Syntax error after 'else': '" -*- "'"))
+        "if" "(" <expr-par> B1/<statm>                   := [if <expr-par> B1]
+        "if" "(" <expr-par> -*-                          := (parse-error P (<-> "Syntax error after 'if(...)': '" -*- "'"))
+        "if" -*-                                         := (parse-error P (<-> "Expected ( after 'if'. Found '" -*- "'")))
+
+
+
+
+\ return       = "return" expr ";" . \
+(parser <return>
+        "return" <expr-semicolon> := [return <expr-semicolon>])
+
+
+
+\assignment   = set_assign | inc_assign | dec_assign 
+             | cni_assign | obvar_set | array_set . \
+(parser <assignment>
+        <set-assign>;
+        <inc-assign>;
+        <dec-assign>;
+        <cni-assign>;
+        <obvar-set>;
+        <array-set>;)
+
+
+
+\ set_assign   = name_list "=" expr ";" . \
+(parser <set-assign>
+        <name>      "=" <expr-semicolon> := [set! <name> <expr-semicolon>]
+        <name-list> "=" <expr-semicolon> := [multi-set! <name-list> <expr-semicolon>])
+
+
+
+\ inc_assign   = name "+" "+" ";" | "+" "+" name ";"  . \
+(parser <inc-assign-expr>
+        <name> "+" "+" := (parse-error P "Postfix ++ not allowed in expression.")
+        "+" "+" <name> := [e-pre-++ <name>])
+
+\ dec_assign   = name "-" "-" ";" | "-" "-" name ";"  . \
+(parser <dec-assign-expr>
+        <name> "-" "-" := (parse-error P "Postfix -- not allowed in expression.")
+        "-" "-" <name> := [e-pre--- <name>])
+
+\ inc_assign   = name "+" "+" ";" | "+" "+" name ";"  . \
+(parser <inc-assign>
+        <name> "+" "+" ";" := [post-++ <name>]
+        "+" "+" <name> ";" := [pre-++ <name>]
+        "+" "+" <name>     := (parse-error P "Missing semicolon after increment")
+        <name> "+" "+"     := (parse-error P "Missing semicolon after increment")
+        "+" "+" -*-        := (parse-error P "Expecting a legal variable name after ++. Found '" -*- "'"))
+
+\ dec_assign   = name "-" "-" ";" | "-" "-" name ";"  . \
+(parser <dec-assign>
+        <name> "-" "-" ";" := [post--- <name>]
+        "-" "-" <name> ";" := [pre--- <name>]
+        "-" "-" <name>     := (parse-error P "Missing semicolon after decrement")
+        <name> "-" "-"     := (parse-error P "Missing semicolon after decrement")
+        "-" "-" -*-        := (parse-error P "Expecting a variable name after --. Found '" -*- "'"))
+
+
+
+\ cni_assign   = name assign_op "=" expr ";" . \
+(parser <cni-assign>
+        <name> <assign-op> "=" <expr-semicolon> := [cni-assign <name> <assign-op> <expr-semicolon>]
+        <name> <assign-op> -*-                  := (parse-error P (<-> "Syntax error: '" <name>" "<assign-op>" " -*- "'")))
+
+\ assign_op    = "+" | "-" | "*" | "/"  . \
+(parser <assign-op>
+        "+" := +
+        "-" := -
+        "*" := *
+        "/" := /)
+
+
+
+\ obvar_set    = objectname "." varname "=" expr ";" . \
+(parser <obvar-set>
+        <object-name> "." <var-name> "=" <expr-semicolon> := [obvar-set <object-name> <var-name> <expr-semicolon>])
+
+
+
+\ array_set    = arrayname "[" expr "]" "=" expr ";" . \
+(parser <array-set>
+        <array-name> "[" Index/<expr-bracket>             "=" Val/<expr-semicolon> := [array-set! <array-name> Index Val]
+        <array-name> "[" Index/<expr-bracket> <assign-op> "=" Val/<expr-semicolon> := [array-cni-set! <array-name> <assign-op> Index Val]
+        <array-name> "[" Index/<expr-bracket> -*- := (parse-error P (<-> "Expected =, +=, -=, *= or /=. Found: '" -*- "'")))
+
+        
+\
+classname    = name .
+varname      = name .
+arrayname    = name .
+objectname   = name .
+methodname   = name .
+\
+(parser <class-name>
+        <name>;)
+(parser <var-name>
+        <name>;)
+(parser <array-name>
+        <name>;)
+(parser <object-name>
+        <name>;)
+(parser <method-name>
+        <name>;)
+
+
+
+\ name_list    = name {"," name} . \
+(parser <name-list>
+        <name> "," <name-list-0> := [<name> | <name-list-0>]
+        <name>                   := [<name>])
+
+(parser <name-list-0>
+        <name> "," <name-list-0> := [<name> | <name-list-0>]
+        <name>                   := [<name>]
+        <reserved>               := (parse-error-reserved P <reserved> "variable")
+        -*-                      := (parse-error P (<-> "Expecting a variable name. Found '" -*- "'")))
+
+
+\ name         = alpha, {alpha | digit | "_"} . \
+(parser <name>
+        <reserved> := (parser-fail)
+        <string>   := (if (is-lower-alpha? (head (explode (string->symbol <string>))))
+                          (string->symbol <string>)
+                          #\Escape))
+
+
+(parser <reserved>
+        <string> := (if (is-reserved-name? (string->symbol <string>))
+                        <string>
+                        #\Escape))
+
+
+(parser <string>
+        -*- := (if (string? -*-) \ Actually, this test will never fail the way the output of the lexer is currently treated. \
+                   -*-           \ Unless it's the end of file, but then -*- will be #Escape, so the test above is still reduntant. \
+                   #\Escape))
+                   
+
+
+
+\ QUIT-COMPILER is overridden when running as a standalone program. (don't want to quit interactive session.) \ 
+(EVAL [DEFUN QUIT-COMPILER []
+        [qi::error ""]])
+
+
+(define p->line-number
+  P -> (let Temp (vector-safe-ref (value *peaks*) P #\Escape)
+         (if (= Temp #\Escape)
+             (error "compiler error. Please report.")
+             (fst Temp))))
+
+(define parse-error
+  P Msg -> (do (print (<-> "error: Line " (p->line-number P) ": " Msg "."))
+               (QUIT-COMPILER)))
+\ Can not use 'error' to print error message, since 'error' fails when printing certain characters. \
+
+
+
+(define parse-error-reserved
+  P Reserved Supposed-to-be -> (parse-error P (<-> "'" Reserved "' is a reserved symbol and can not be used as " 
+                                                   Supposed-to-be " name")))
+
+
+
+(define peak
+  P -> (let Temp (vector-safe-ref (value *peaks*) P #\Escape)
+            (if (= Temp #\Escape)
+                #\Escape
+                (snd Temp))))
+
+(define init-peak-0
+  N []                 -> []
+  N [Ln string A | As] -> (init-peak-0 N [Ln (write-string-string A) | As])
+  N [Ln A        | As] -> (do (vector-set (value *peaks*) N (@p Ln A))
+                              (init-peak-0 (+ 1 N) As)))
+
+(define init-peak
+  -> (do (set *peaks* (make-vector (FLOOR (/ (length (value *lexlist*)) 2))
+                                   #\Escape)) \ *lexlist* is more than twice as long with strings. \
+         (init-peak-0 0 (value *lexlist*))))
+
+
+\
+(do (init-peak)
+    (time (<program> peak 0))
+    [])
+
+(peak 192)
+(do (init-peak)
+    (<program> peak 0))
+
+(do (init-peak)
+    (fix-expr (snd (<program> peak 0))))
+
+(do (init-peak)
+    (remove-unneeded-blocks (fix-expr (snd (<program> peak 0)))))
+
+
+(do (init-peak)
+    (transform-class-gen-init-methods (remove-unneeded-blocks (fix-expr (snd (<program> peak 0))))))
+
+(untrack transform-class-gen-init-methods)
+(track transform-class-gen-init-method)
+
+
+
+(untrack vector-safe-ref)
+(untrack p->line-number)
+(untrack tostring)
+(untrack print)
+(untrack parse-error)
+(untrack <class>)
+(untrack <class-args>)
+(untrack <class-name>)
+(untrack <class-elems>)
+(untrack <class-elem>)
+
+\
+

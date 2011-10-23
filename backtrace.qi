@@ -1,0 +1,121 @@
+
+\
+(set *tarray* (make-array 5))
+(put-array (value *tarray*) [2] 3)
+(get-array (value *tarray*) [2] unknown)
+(value *tarray*)
+\
+
+(set *backtrace-pos* 0)
+(set *backtrace-length* 0)
+(set *backtraces* false)
+
+(define add-backtrace
+  Name Args -> (let Pos (value *backtrace-pos*)
+                 Len (value *backtrace-length*)
+                 (do (put-array (value *backtraces*) [Pos] [Name | Args])
+                     (set *backtrace-pos* (if (= Pos (- Len 1))
+                                              0
+                                              (+ 1 Pos))))))
+
+(define bt-0
+  N  N   -> end
+  -1 End -> (bt-0 (- (value *backtrace-length*) 1) End)
+  N  End -> (do (PRINT (get-array (value *backtraces*) [N] 'unknown))                
+                (bt-0 (- N 1) End)))
+(define bt
+  -> (if (= false (value *backtraces*))
+         (error "Backtrace not enabled")
+         (bt-0 (- (value *backtrace-pos*) 1)
+               (value *backtrace-pos*))))
+
+\
+(bt)
+(track bt-0)
+(concat asdf (concat (INTERN (newline)) asdf))
+\
+
+(define is-backtracked-0?
+  [A [do [add-backtrace|_] |_] | _   ] -> true  where (= A ->)
+  [A                           | _   ] -> false where (= A ->)
+  [_                           | Rest] -> (is-backtracked-0? Rest))
+
+(define is-backtracked?
+  [define Name | Patterns] -> (is-backtracked-0? Patterns))
+
+\
+(is-backtracked? [define Hepp a -> 0])
+(is-backtracked? [define Hepp a -> [do is-backtracked 0]])
+\
+
+(define add-backtracks-0
+  Name _ []                -> []
+  Name Args [A Val | Rest] -> [A [do [add-backtrace Name [list | Args]] 
+                                     Val]
+                                 | (add-backtracks-0 Name [] Rest)]
+  where (= A ->)
+  Name _    [Where Test | Rest] -> [Where Test | (add-backtracks-0 Name [] Rest)]
+  where (= Where where)
+  Name Args [U     | Rest]   -> [U | (add-backtracks-0 Name ["_"|Args] Rest)]
+  where (= U (INTERN "_"))
+  Name Args [A     | Rest]   -> [A | (add-backtracks-0 Name [A|Args] Rest)])
+
+(define add-backtracks
+  [define Name | Patterns] -> [define Name | (add-backtracks-0 Name [] Patterns)])
+
+\
+(add-backtracks [define Hepp 2 -> 0
+                             9 -> 50])
+(is-backtracked? [define Hepp a -> [do is-backtracked 0]])
+\
+
+(define backtracks-sugar
+  [define Name | Patterns] -> (add-backtracks [define Name | Patterns])
+  where (not (is-backtracked? [define Name | Patterns]))
+  A -> A)
+
+(define enable-backtracking
+  N -> (do
+        (set *backtraces* (make-array N))
+        (set *backtrace-length* N)
+        (sugar in backtracks-sugar 5)))
+
+(define disable-backtracking
+  -> (do (set *backtraces* false)
+         (unsugar backtracks-sugar)))
+
+\
+(<-> 50)
+(define call-randomly N -> (eval (list (nth (+ 1 (random 6)) [a b c d e f])
+                                       (random 100))))
+
+(define a N -> (call-randomly 1))
+(define b N -> (call-randomly 2))
+(define c N -> (call-randomly 66 3))
+(define d N -> (call-randomly 4))
+(define e N -> (call-randomly 5))
+(define f N -> (error "end"))
+
+(define hepp
+  0 -> 90
+  1 -> 100
+  A -> A)
+\
+
+\
+(<-> 5 3)
+(disable-backtracking)
+(enable-backtracking 10)
+(hepp 0)
+(hepp 5)
+(call-randomly 9)
+(bt)
+(ps call-randomly)
+(ps hepp)
+(ps <->-macro)
+
+(ps filter)
+(filter float? [2 3 4 5 6 7 8])
+(bt)
+\
+

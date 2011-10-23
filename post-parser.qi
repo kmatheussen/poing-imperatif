@@ -1,0 +1,133 @@
+
+
+
+\
+Fix expressions after parsing.
+* Moving poing imperatif code found in faust expressions into poing imperatif.
+* etc.
+
+The implementation is ugly (and not functional), but this is much simpler
+than parsing the tree. The functionality could also have been put into the
+parser. However, since the task is not that complicated, a little bit
+of ugly code here is probably better than putting extra obfuscating logic into
+the parser.
+\
+
+(set *expr-elems* [])
+(define push-expr
+  Expr Return -> (do (set *expr-elems* [Expr | (value *expr-elems*)])
+                     Return))
+
+(define fix-expr
+  [e-pre-++ Name]                    -> (push-expr [pre++ Name] Name)
+  [e-pre--- Name]                    -> (push-expr [pre++ Name] Name)
+  [e-method-call Object Method Args] -> (let Var (gensym (<-> Object "_callget_res"))
+                                          (push-expr [object-call-get Var Object Method (fix-expr Args)]
+                                                     Var))
+  [e-object-var Object Slot]         -> (let Var (gensym (<-> Object "_get_res"))
+                                          (push-expr [object-get Var Object Slot]
+                                                     Var))
+  [e-array-ref Array Pos]            -> (<-> "rwtable(" Array "__size, " Array "__init, " Array "__pos, " Array "__val, (" 
+                                             (tail (fix-expr Pos)) 
+                                             "))")
+
+  [Method-elem|Ms] -> (let Old-elms (value *expr-elems*)
+                           Result   (do (set *expr-elems* [])
+                                        [Method-elem | (fix-expr Ms)])
+                           New-elms (value *expr-elems*)
+                           (do (set *expr-elems* Old-elms)
+                               (if (empty? New-elms)
+                                   Result
+                                   (let Hepp (reverse New-elms)
+                                     [block ,Hepp Result]))))
+  
+  where (element? Method-elem [method-call single-decl if return set! multi-set!
+                               cni-assign obvar-set array-set! array-cni-set!])
+
+  [A | As] -> [(fix-expr A) | (fix-expr As)]
+
+  A        -> A)
+
+\
+(track fix-expr)
+(fix-expr [block 
+           [if [expr [e-pre-++ bufidx] ">=" "bufsize"]
+               [set! bufidx [expr [e-pre--- "gakk"]]]]])
+          
+\
+
+
+\
+In transform-code, every block causes an extra faust function call.
+Extra function calls can significantly increase faust compilation time.
+Hopefully, that will be fixed, but until then, this band aid
+is needed.
+
+'remove-unneded-blocks' moves all contents of blocks into the
+outer block, if there is one. (IOW. it's a block flattener function.)
+
+I've slightly complicated/optimized the code by using 'map' here and there.
+It probably makes no significant difference in performance though.
+\
+
+(define remove-all-blocks-from-list
+  [                           ]   -> []
+  [[block | Method-elems] | As]   -> (remove-all-blocks-from-list (append Method-elems As))
+  [A                      | As]   -> [A | (remove-all-blocks-from-list As)])
+
+(define remove-unneeded-blocks
+  [method Name Args | As] -> [method Name Args | (map remove-unneeded-blocks (remove-all-blocks-from-list As))]
+  [block | As]            -> [block | (map remove-unneeded-blocks (remove-all-blocks-from-list As))]
+  As                      -> (map remove-unneeded-blocks As) where (cons? As)
+  A                       -> A)
+
+\
+(untrack remove-unneeded-blocks)
+(untrack remove-all-blocks)
+(remove-all-blocks-from-list [[block a b c]])
+(remove-unneeded-blocks (fix-expr [method Name [[int a][float b]]                                          
+                                          [block [block a b] c d [block [block e f]]]
+                                          [if [expr [e-pre-++ bufidx] ">=" "bufsize"]
+                                              [set! bufidx [expr [e-pre--- "gakk"]]]]]))
+\
+
+
+(define gen-initrepeat-method
+  []                                   -> []
+  [[object-decl Type Name Val] | Rest] -> [[method-call Name ___initrepeat (<-> Args " : " (get-___initrepeat-args-filter Type))]
+                                           | (gen-initrepeat-method Rest)] where (is-initrepeat___-required? Type) 
+                                           \ "where ..." is there to avoid something like this: "(one_signal : (!))". \
+  [_                           | Rest] -> (gen-initrepeat-method Rest))
+
+
+(define gen-init-method
+  []                                   -> []
+  [[array _ Name _ Val]        | Rest] -> [[set! (<_> (<-> Name __val)) Val] | (gen-init-method Rest)] where (not (element? Val [0 0.0 "0" "0.0"]))
+  [[single-decl Type Names Val]| Rest] -> [[set! Names Val] | (gen-init-method Rest)] where (not (element? Val [0 0.0 "0" "0.0"]))
+  [[object-decl Type Name Val ]| Rest] -> [[method-call Name ___init Val] | (gen-init-method Rest)]
+  [_                           | Rest] -> (gen-init-method Rest))
+
+\
+(do (init-peak)
+    (transform-class-gen-init-methods (remove-unneeded-blocks (fix-expr (snd (<program> peak 0))))))
+
+(do (init-peak)
+    (remove-unneeded-blocks (fix-expr (snd (<program> peak 0)))))
+
+(gen-init-method [[single-decl int [bufidx]]
+                  [array float buffer [expr "bufsize"] 0.0]
+                  [single-decl int [b] 5]
+                  [object-decl c__Bank bank 50]
+                  [method process [[unknown input]]
+                          ]])
+
+(gen-initrepeat-method [[single-decl int [bufidx]]
+                        [array float buffer [expr "bufsize"] 0.0]
+                        [single-decl int [b] 5]
+                        [object-decl c__Bank bank 50]
+                        [method process [[unknown input]]
+                                ]])
+
+
+(track transform-class-gen-init-method)
+\

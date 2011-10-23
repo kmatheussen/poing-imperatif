@@ -1,0 +1,408 @@
+\
+
+INTRO
+
+This file creates a macro called 'parser'.
+'parser' is similar to 'defcc', but 'parser' is more
+customizable plus that the generated parser
+functions have a defined API.
+
+'parser' has not been optimized yet [1], but it seems to
+be efficient enough for the specific task it was made for;
+parsing the Poing Imperatif programming language.
+
+A function called 'parser-compile' is supplied as well.
+'parser-compile' works similarly to 'compile'.
+However, 'parser-compile' was added only for convenience when
+trying the parser. If you only use 'parser-compile'
+to access the parser, 'defcc' might be a better alternative.
+
+Feel free to include and use code from this file in your programs.
+Please also credit me if you find it appropriate.
+
+-Kjetil Matheussen, 2011.
+
+
+[1] For rules with similar matchers, partly results can be
+cached and reused. A simple way to achieve this is to memoize
+parser functions. This has not been implemented.
+
+
+
+SHORT MANUAL
+
+* Definition of terms (by examples):
+
+  * Parser:   (parser <a>
+                 "a" <c> := 1)
+                  |   |   |
+                  |   |   |
+  * Rule:        "a" <c> := 1
+                  |   |   |
+                  |   |   |
+  * Matcher:     "a"  |   |
+                      |   |
+                      |   |
+  * Matcher (also):  <c>  |
+                      |   |
+                      |   |
+  * Parser call:     <c>  |
+                          |
+                          |
+  * Semantic:            := 1
+
+
+
+
+* This code:
+
+    (parser <a>
+      "b" "c" := 100)
+    (parser-compile <a> ["b" "c" "d"])
+
+  returns:
+
+    (@p 3 100)
+
+
+  The first value in the tuple ('3'), is the number 'parser-compile'
+  would use as argument for 'nth' on the input list to get the next value.
+  (This variable is called 'P'. See below.)
+
+  The reason 'parser-compile' does not fail here (which 'defcc'/'compile'
+  does) is for convenience only. The supplied 'parser-compile' function should mainly
+  be used for testing parsers. Creating a new compile function that fails
+  in this case is trivial.
+
+
+* There's a slight difference in the use of semicolon compared to defcc.
+  In defcc, you always need a semicolon after a rule. Here, you only
+  need a semicolon if there is no semantic:
+
+    (defcc <a>
+       "a" := 1;
+       "b";
+       "c" := 3;)
+
+    (parser <a>
+       "a: := 1
+       "b";
+       "c" := 3)
+
+
+* Another difference compared to 'defcc'.
+  This code:
+
+    (parser <a>
+       "a" "c";)
+    (parser-compile <a> ["a" "c"])
+
+  returns
+
+    (@p 3 "c").
+
+  If semantic is not supplied, the last matcher
+  is returned instead (i.e. the last in ["a" "c"]).
+
+  'defcc' instead returns all input matchers: ["a" "c"].
+
+
+* Possible to assign variable names to parser calls.
+  For instance, this:
+
+    (parser <a>
+      One/<b> Two/<c> := [One Two])
+
+  is equal to:
+
+    (parser <a>
+      <b> <c> := [<b> <c>])
+  
+  This can be especially useful if a rule contains several of the same
+  parser calls.
+
+
+
+* If a matching rule returns (parser-fail), the parser returns #Escape:
+
+  (define <a>
+     "a"  := (parser-fail)
+     "a"  := 10
+     "b"  := 20)
+
+  (parser-compile <a> ["a"])
+  => #Escape
+
+  (parser-compile <a> ["b"])
+  => (@p 2 20)
+
+
+  The following example shows when this can be useful:
+
+  (define <a>
+     "a"  := (parser-fail)
+     <b>)
+
+  (define <b>
+     "a";
+     "b";
+     "c";)
+
+  I.e.: <a> is <b>, except when <a> is "a".
+
+  In Poing Imperatif, (parser-fail) is only used one place.
+
+
+
+* Unless a matcher is a parser call, '=' is used to compare
+  the input against exactly what is written in the rule.
+
+  For instance:
+
+    (set val 0)
+    (parser <a>
+      (value val) := equal)
+    (set val 8)
+    (parser-compile <a> [8])
+
+  returns
+
+     (@p 2 equal)
+
+  since 
+
+     (= (value val) 8)
+
+  is true when "(parser-compile <a> [8])" is called.
+
+
+
+* The function 'Peak' and the variable 'P' are always available.
+  "(Peak P)" returns the current element, while "(Peak (1+ P))"
+  returns the next element, and so on.
+
+  Example:
+
+    (parser <a>
+        -*- := (do (print "Current: ")      (print -*-)
+                   (print "Also current: ") (print (Peak P))
+                   (print "Next: ")         (print (Peak (1+ P)))
+                   (print "Next Next: ")    (print (Peak (+ 2 P)))
+                   (print "Previous: ")     (print (Peak (1- P)))
+                   -*-))
+
+
+* Parsers can be created manually. Instead of writing:
+
+    (parser <a>
+       "a";)
+
+  You can write:
+
+    (define <a>
+      Peak P -> (if (= "a" (Peak P))
+                    (@p (1+ P) "a")   <--- Parser functions either return a tuple containing the new P and the result,
+                    #Escape))         <--- or #Escape (with backslash after #).
+
+
+* '-s-' and '-o-' (which are supported by defcc), are not supported.
+
+
+* '<e>' is supported.
+
+
+* In Emacs qi-mode, I've added the following two lines:
+
+'("\\<\\(define\\|datatype\\|parser\\)\\>" . font-lock-keyword-face)
+'("<\\sw+>" . font-lock-variable-name-face)
+
+\
+
+
+(set *parser-fail-value* (gensym "parser-fail"))
+(define parser-fail
+  -> (value *parser-fail-value*))
+
+
+(define parser-get-name
+  A -> (let S   (symbol->string A)
+            Pos (SEARCH "/" S)
+            (if (or (= Pos [])
+                    (is-lower-alpha? (head (explode A))))
+                A
+                (let Name (SUBSEQ S 0 Pos)
+                  (if (or (= "P" Name)
+                          (= "Peak" Name))
+                      (error "A matcher name can not be named P or Peak")
+                      (string->symbol Name))))))
+
+(define parser-get-matcher
+  A -> (let S   (symbol->string A)
+            Pos (SEARCH "/" S)
+            (if (or (= Pos [])
+                    (is-lower-alpha? (head (explode A))))
+                A
+                (string->symbol (SUBSEQ S (1+ Pos))))))
+
+\
+(track parser-get-matcher)
+(untrack parser-get-name)
+(parser-get-name P/<expr>)
+(parser-get-matcher Size/<expr>)
+(parser-get-matcher <expr>)
+(parser-get-name Size/<expr>)
+(parser-get-name <expr>)
+\
+
+(define parser-is-parser-call?
+  Matcher -> (and (or (variable? Matcher)
+                      (symbol? Matcher))
+                  (let Matcher (parser-get-matcher Matcher)
+                       Els     (explode Matcher)
+                       (and (= #\< (head Els))
+                            (= #\> (last Els))))))
+
+\
+(parser-is-parser-call? <abc)
+(parser-is-parser-call? <abc>)
+(parser-is-parser-call? abc>)
+(parser-is-parser-call? Size/<expr>)
+(parser-is-parser-call? Size/expr>)
+(parser-rule [V/<var>] [list V])
+\
+
+
+
+(define parser-rule
+  []       Semantic -> (let Semantics-try (gensym "Semantics-try")
+                         [let Semantics-try Semantic
+                           [if [not [= #\Escape Semantics-try]]
+                               [@p P Semantics-try]
+                               #\Escape]])
+
+  [<e>|_ ] Semantic -> (parser-rule [] Semantic)
+
+  [-*-|Ms] Semantic -> [let -*- [Peak P]  \ A 'let' with more than 3 arguments doesn't work with Qi macros (SBCL). \
+                         [let P [1+ P]
+                           (parser-rule Ms Semantic)]]
+
+  [M  |Ms] Semantic -> (let Matcher (parser-get-matcher M)
+                            Name (parser-get-name M)
+                            Temp (gensym "Temp")
+                            [let Temp [Matcher Peak P]
+                              [if [= #\Escape Temp]
+                                  #\Escape
+                                  [let P [fst Temp]
+                                    [let Name [snd Temp]
+                                      (parser-rule Ms Semantic)]]]]) where (parser-is-parser-call? M)
+
+
+  [M  |Ms] Semantic -> [if [= [Peak P] M]
+                           [let P [1+ P]
+                             (parser-rule Ms Semantic)]
+                           #\Escape])
+                       
+\
+(parser-rule [-*-] [1+ -*-])
+(parser-rule [","] 50)
+(parser-rule [<e>] [])
+(parser-rule [<var>] [<var>])
+(parser-rule [V/<var>] [V])
+(parser-rule [<var> "," <var-list>] [<var> | <var-list>])
+\
+
+(define parser-rules
+  []                            -> #\Escape
+  [[Matchers Semantic] | Rules] -> (let Rule-try (gensym "Rule-try")
+                                     [let Rule-try (parser-rule Matchers Semantic)
+                                       [if [= #\Escape Rule-try]
+                                           (parser-rules Rules)
+                                           Rule-try]]))
+
+\
+(PPRINT (parser-rules [[[-*-] [1+ -*-]]
+                       [[","] 50]]))
+\
+
+(define organize-parser-elements
+  []        []                   -> []
+  This-rule [;           | Rest] -> [[This-rule (last This-rule)] | (organize-parser-elements [] Rest)]
+  This-rule [:= Semantic | Rest] -> [[This-rule Semantic        ] | (organize-parser-elements [] Rest)]
+  This-rule [A           | Rest] -> (organize-parser-elements (append This-rule [A]) Rest))
+
+\
+(track organize-parser-elements)
+(organize-parser-elements [] [<a>;])
+(organize-parser-elements [] [<a> <b>;])
+(organize-parser-elements [] [<a>; <b> <c>;])
+
+(organize-parser-elements []
+                          [-*-       := [1+ -*-]
+                           "," <var> := [<var> 90]])
+(parser-rules (organize-parser-elements []
+                                        [-*-       := [1+ -*-]
+                                         "," <var> := [<var> 90]]))
+\
+
+(define parser-parser
+  Parser-name Rules -> (let Main-try (gensym "Main-try")
+                         [define Parser-name
+                           Peak P -> [let Main-try (parser-rules (organize-parser-elements [] Rules))
+                                       [if [or [= #\Escape Main-try]
+                                               [= (parser-fail) [snd Main-try]]]
+                                           #\Escape
+                                           Main-try]]]))
+
+\
+(PPRINT (parser-parser <strange> [-*- := [1+ -*-] "," <var> := [list <var> 90]]))
+(parser-parser <strange> [-*- := [1+ -*-] "," <var> := [cons <var> [cons 90 []]]])
+(parser-parser <var-list>
+               [<var> "," <var-list> := [cons <var> | <var-list>]
+                <var>                := [list <var>]
+                <e>                  := [list]])
+(organize-parser-elements []
+                          [<var> "," <var-list> := [cons <var> | <var-list>]
+                           <var>                := [list <var>]
+                           <e>                  := [list]])
+\
+
+
+(define parser-parser-macro
+  [parser Parser-name | Rules] -> (parser-parser Parser-name Rules)
+  A -> A)
+
+(sugar in parser-parser-macro 1)
+
+
+(define parser-compile
+  Func Input -> (Func (/. X (if (> X (length Input))
+                                #\Escape
+                                (nth X Input)))
+                      1))
+                          
+
+\
+(parser <strange>
+   "a" -*- := (1+ 50)
+   "," <var> := [<var> 90])
+
+(ps <strange>)
+
+(define peak
+  P -> (nth P ["(" "int" "int2" "anint" "," "float" "afloat" "," "anunknown" ")"]))
+
+(<strange> peak 1)
+(parser-compile <strange> ["(" "int" "int2" "anint" "," "float" "afloat" "," "anunknown" ")"])
+
+(parser <strange2>
+        (+ 2 3) := 6)
+
+(parser-parser <strange2> [[+ 2 3] := 6])
+
+(parser-parser <strange3> [<a> := 7])
+
+(ps <strange2>)
+
+(ps <name>)
+
+\

@@ -1,0 +1,33 @@
+
+(define a
+  A -> (b A))
+(define b
+  B -> (+ B 9))
+
+
+(define stacktrace-macro
+  [stacktrace Code] -> [HANDLER-CASE [TRACE [LAMBDA [] [qi::eval [QUOTE Code]]]]
+                                     [ERROR [condition]
+                                            [PROGN                                             
+                                             [PRINT 80]
+                                             [PRINT [EVAL [READ-FROM-STRING "SB-DEBUG:*TRACE-VALUES*"]]]
+                                             [PRINT 90]
+                                             [PRINC condition]]]]
+  A -> A)
+ 
+(stacktrace (+ 2 a))
+
+(sugar in stacktrace-macro 2)
+(unsugar stacktrace-macro)
+
+(+ 2 3)
+(stacktrace 50)
+(stacktrace (+ 2 5))
+
+
+(HANDLER-CASE (qi::eval (QUOTE (do (init-peak)
+                                   (<program> peak 0))))
+              (ERROR (condition)
+                     (PROGN
+                      (PRINT 90)
+                      (PRINC condition))))

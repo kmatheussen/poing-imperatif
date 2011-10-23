@@ -1,0 +1,56 @@
+
+(define string-append
+  A B -> (CONCATENATE STRING A B))
+
+\
+(string-append "A" "B")
+\
+
+(define symbol->string
+  A -> (SYMBOL-NAME A))
+\
+(symbol->string FsdD)
+(INTERN "asdf")
+\
+(define string->symbol
+  A -> (INTERN A))
+
+(define string->number
+  A -> (READ-FROM-STRING A))
+
+
+\ Using (newline) instead of backslash-n since use of backslashes outside comments screws up emacs qi mode. \
+(define newline
+  -> (STRING #\newline))
+
+(define tostring
+  false    -> "<false>"
+  true     -> "<true>"
+  String   -> String                where (string? String)
+  Num      -> (WRITE-TO-STRING Num) where (number? Num)
+  Sym      -> (symbol->string Sym)  where (or (symbol? Sym)
+                                              (variable? Sym))
+  Char     -> (STRING Char)         where (character? Char)
+  []       -> ""
+  [A|Rest] -> (string-append (tostring A) (tostring Rest))
+  A        -> (string-append "<type " 
+                             (string-append (symbol->string (type A))
+                                            ">")))
+
+
+(define <->-macro-handler
+  [<-> | Rest] -> [tostring [list | Rest]]
+  A -> A)
+
+(sugar in <->-macro-handler 0)
+
+\
+(<-> a b)
+(<-> [asedf " " bb  (newline) [2 dd] (+ 2 3)])
+(<->-macro [asedf " " bb  (newline) [2 dd] (+ 2 3)])
+(track <->-macro)
+(WRITE-TO-STRING 250)
+(xWRITE-TO-STRING 250.4)
+(unsugar <->-macro-handler)
+\
+

@@ -1,0 +1,27 @@
+
+(define splice-macro
+  [cons Komma [cons A B]] -> [append A (splice-macro B)] where (= , Komma)
+  [cons A B]              -> [cons A (splice-macro B)]
+  A                       -> A)
+
+(sugar in splice-macro 4)
+
+\
+(unsugar splice-macro)
+
+(let B [e f]
+  [a ,[b c] d ,B g ,[h i] j])
+
+(let B [e f]
+  [a ,[b ,[c]] d ,B g ,[h i] j])
+
+[,[b ,[,[a c ,[a] ,[d]]] f]]
+
+[1 , [2 3]]
+[1 , [2 3] 4]
+[1 | [2 3] 4]
+
+
+(ps splice-macro)
+\
+

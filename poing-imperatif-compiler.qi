@@ -1,0 +1,2728 @@
+\
+  Kjetil Matheussen, 2010-2011.
+    
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+\
+
+
+\
+Start:
+
+(do
+ (load "/home/kjetil/poing-imperatif/tostring.qi") 
+ (load "/home/kjetil/poing-imperatif/splice.qi") 
+ (load "/home/kjetil/poing-imperatif/poing-imperatif-compiler.qi") 
+ (load "/home/kjetil/poing-imperatif/parser-parser.qi") 
+ (load "/home/kjetil/poing-imperatif/parser.qi"))
+
+
+(das-main "/tmp/impfaust_lexed.lsp" "/tmp/hepp.dsp")
+(do (init-peak)
+    (<program> peak 0))
+
+(do (init-peak)
+    (fix-expr (snd (<program> peak 0))))
+
+(untrack <program>)
+(track <class>)
+
+To enable function history:
+(load "/home/kjetil/poing-imperatif/backtrace.qi") 
+(enable-backtracking 100)
+(disable-backtracking)
+\
+
+
+
+\
+(speed 3)
+\
+
+(define nth-cdr
+  1 A -> A
+  N _ -> (error "N<1 in nth-cdr")
+  where (< N 1)
+  N [A|Rest] -> (nth-cdr (- N 1) Rest))
+
+(define delete-duplicates
+  []         -> []
+  [A | Rest] -> (delete-duplicates Rest) where (element? A Rest)
+  [A | Rest] -> [A | (delete-duplicates Rest)])
+
+(define flatten
+  []         -> []
+  [A | Rest] -> (append (flatten A) (flatten Rest))
+  A          -> [A])
+
+\
+(map flatten [a [b c] [] [[d][e] f [[[g]]]]])
+(delete-duplicates [a b a c])
+\
+
+(define keep
+  _    []       -> []
+  Pred [A|Rest] -> [A | (keep Pred Rest)] where (Pred A)
+  Pred [_|Rest] -> (keep Pred Rest))
+
+\ There is an undocumented function in Qi called 'intersection'. Don't
+  know whether it behaves exactly the same. The intersection used here must keep the same order. \
+(define set-intersection
+  []       _ -> []
+  [A|Rest] B -> [A | (set-intersection Rest B)] where (element? A B)
+  [_|Rest] B -> (set-intersection Rest B))
+
+\ Not really a set-subtract, since order matters. (not the same as 'difference'!)
+ \
+(define set-subtract
+  []    B -> []
+  [F|R] B -> (if (element? F B)
+                 (set-subtract R B)
+                 [F | (set-subtract R B)]))
+
+\
+(set-subtract [a b c] [b d e f]) -> [a c]
+\  
+\
+(define butlast
+  L -> (reverse (nth-cdr 2 (reverse L))))
+\
+(define butlast
+  [] -> []
+  [A] -> []
+  [A|Rest] -> [A | (butlast Rest)])
+
+(define last
+  [] -> []
+  [A] -> A
+  [_|Rest] ->  (last Rest))
+
+(define assoc?
+  A As -> (cons? (assoc A As)))
+
+(define make-list
+  0 _ -> []
+  N S -> [S | (make-list (- N 1) S)])
+
+(define zip
+  [] _  -> []
+  _  [] -> []
+  [A|As] [B|Bs] -> [[A B]|(zip As Bs)])
+\
+(zip [a b c][1 2 3])
+\
+(DEFUN WRITE-STRING-STRING (A)
+  (CONCATENATE 'STRING (STRING #\") A (STRING #\")))
+(define write-string-string A
+  -> (WRITE-STRING-STRING A))
+\
+(write-string-string "asdf")
+\
+
+(define <_> A
+  -> (string->symbol (<-> A)))
+
+
+(define make-hash-table
+  -> (MAKE-HASH-TABLE))
+
+(define set-hash
+  Table Name Value -> (SETF (GETHASH Name Table) Value))
+(define get-hash
+  Table Name -> (GETHASH Name Table))
+
+\
+(set *hash* (make-hash-table))
+(set-hash (value *hash*) a 1)
+(set-hash (value *hash*) b 2)
+(get-hash (value *hash*) a)
+(get-hash (value *hash*) bb)
+\
+
+(define make-vector
+  Size Initial -> (MAKE-ARRAY Size :INITIAL-ELEMENT Initial))
+
+(define vector-size
+  Vector -> (ARRAY-TOTAL-SIZE Vector))
+
+(define vector-ref
+  Vector Pos -> (SVREF Vector Pos))
+
+(define vector-safe-ref
+  Vector Pos Failed -> (if (>= Pos (vector-size Vector))
+                           Failed
+                           (vector-ref Vector Pos)))
+(define vector-set
+  Vector Pos Value -> (SETF (SVREF Vector Pos) Value))
+
+
+\
+(set *vector* (make-vector 50))
+(vector-set (value *vector*) 20 100)
+(vector-ref (value *vector*) 20)
+(vector-size (value *vector*))
+(value *vector*)
+\
+
+
+(set *hex-chars* (explode "0123456789abcdef"))
+
+(define hex-char?
+  C -> (element? C (value *hex-chars*)))
+
+(define all-hex-chars?
+  []       -> true
+  [C|Rest] -> (and (hex-char? C)
+                   (all-hex-chars? Rest)))
+
+(define hex-string?
+  A -> (let Expl (explode (string->symbol A))
+            (and (> (length Expl) 2)
+                 (= #\o (nth 1 Expl))
+                 (or (= #\x (nth 2 Expl))
+                     (= #\X (nth 2 Expl)))
+                 (all-hex-chars? (nth-cdr 3 Expl)))))
+
+\
+(track all-hex-chars?)
+(hex-string? "ox509abcy")
+(explode (string->symbol "ox2"))
+(string->symbol "02")
+\                 
+
+(define hex-string-to-dec
+  A -> (READ-FROM-STRING (<-> #\# (nth-cdr 2 (explode (string->symbol A))))))
+
+\
+(hex-string-to-dec "ox509abc")
+(hex-string-to-dec "oxd")
+\
+
+
+
+(set *lower-alphas* (explode abcdefghijklmnopqrstuvwxyz))
+ 
+(define is-lower-alpha?
+  A -> (element? A (value *lower-alphas*)))
+
+(define is-reserved-name?
+  A -> (element? A [int float \ Reserved both in PI and faust\
+                        void class method if else return new \ Reserved in PI \
+                        \ Rest, reserved in Faust: \
+                        par seq sum prod 
+                        with declare import component
+                        ffunction fconstant 
+                        button checkbox vslider hslider nentry vgroup hgroup tgroup vbargraph hbargraph 
+                        mem rdtable rwtable select2 select3 
+                        acos asin atan atan2 cos sin tan exp log log10 pow sqrt abs min max fmod remainder floor ceil rint
+                        ]))
+
+(define is-name?
+  A -> (is-name? (string->symbol A)) where (string? A)
+  A -> (and (is-lower-alpha? (head (explode A)))
+            (if (is-reserved-name? A)
+                (parse-error (<-> A " is a reserved name")) \ Should probably return false, but it's nice to get a readable error. \
+                true)))
+
+\
+(is-name? "hepp")
+\
+
+\ Names that are reserved, but also valid functions \
+(define is-function-name?
+  A -> (or (element? (<_> A) [float int
+                                    acos asin atan atan2 cos sin tan exp log log10 pow sqrt abs min max fmod remainder floor ceil rint
+                                    ])
+           (is-name? A)))
+
+
+(define are-names?
+  []       -> true
+  [A|Rest] -> (and (is-name? A)
+                   (are-names? Rest)))
+
+(define is-numeric?
+  Type -> (or (element? Type [int float])
+              (element? Type ["int" "float"])))
+
+(define is-numeric?-are-names?
+  Type Names -> (and (is-numeric? Type)
+                     (are-names? Names)))
+
+(define is-type?-are-names?
+  Type Names -> (and (or (is-numeric? Type)
+                         (is-name? Type))
+                     (are-names? Names)))
+
+\ *****************************************************
+  *****************************************************
+                * Extract variables from:
+                    * class{...}
+                    * methods
+                * Used when transforming code, not parsing.
+  *****************************************************
+  ******************************************************* \
+
+(set *class-defs* (make-hash-table))
+
+\ Args argument is in the following format: [[<type> <name>][<type> <name>]] \
+
+(define put-method-args
+  Class-name Name Args -> (let Val (map (/. A [(nth 2 A) (nth 1 A)]) Args)
+                            (set-hash (value *class-defs*)
+                                      (get-method-func-name Class-name Name)
+                                      (if (empty? Val)
+                                          noargs
+                                          Val))))
+
+\ The second argument to this function is a parsed class \
+(define put-all-method-args
+  Class-name []                               -> [] 
+  Class-name [[method Name Args|Code] | Rest] -> (do (put-method-args Class-name Name Args)
+                                                     (put-all-method-args Class-name Rest))
+  Class-name [_                       | Rest] -> (put-all-method-args Class-name Rest))
+\
+(track put-method-args)
+(untrack get-method-func-name)
+\
+(define get-method-args
+  Method-name -> (let Ret (get-hash (value *class-defs*) Method-name)
+                      (if (= noargs Ret)
+                          []
+                          Ret)))
+\
+(get-method-args c___Initargs_____initrepeat)
+(get-method-args bank__get)
+(get-method-args bank__inc)
+(get-method-args c___AllPass_____init)
+(get-method-args c___AllPass__process)
+\
+
+(define method-exists?
+  Method-name -> (not (= [] (get-hash (value *class-defs*) Method-name))))
+
+\
+(method-exists bank__get)
+(method-exists bank__a)
+\
+
+(define get-object-variable-name
+  this   Attribute -> Attribute
+  Object Attribute -> (<_> (<-> Object "___" Attribute)))
+
+(define get-class-variables-0
+  Vars ""          -> Vars
+  Vars Object-name -> (map (/. Var [(get-object-variable-name Object-name (nth 1 Var)) (nth 2 Var)])
+                           Vars))
+
+(define get-class-variables
+  Class-name Prefix -> (let Vars (get-hash (value *class-defs*) Class-name)
+                            (if (empty? Vars)
+                                (parse-error (<-> "Undefined class '" Class-name "'"))
+                                (if (= noargs Vars)
+                                    (get-class-variables-0 [[retsel__ int]] Prefix)
+                                    (get-class-variables-0 (append Vars [[retsel__ int]]) Prefix)))))
+  
+
+(define get-class-arguments
+  Class-name -> (get-method-args (get-method-func-name Class-name ___init)))
+
+\ [[a float][bank0 bank]] -> [[a float][bank0__init float][bank0__value float]...] \
+
+(define get-class-arguments-names
+  Class-name -> (map head (get-class-arguments Class-name)))
+
+(define get-___init-arguments
+  Class-name -> (get-class-arguments Class-name))
+
+
+(define get-___initrepeat-arguments
+  Class-name -> (get-method-args (get-method-func-name Class-name ___initrepeat)))
+
+\
+(get-___initrepeat-arguments c___InitArgs)
+(get-class-arguments c___InitArgs)
+(get-class-variables c___InitArgs "")
+\
+
+\
+  * In "class Bank(float initvalue){...}", 'initvalue' is a class argument.
+  * The ___init-arguments are the same as the class entry function arguments
+  * put-___init-arguments must be called before put-___initrepeat-arguments since
+    put-___initrepeat-arguments contains any array size variable included in the ___init-arguments.
+\
+(define put-___init-arguments
+  Class-name Args -> (put-method-args Class-name ___init Args))
+
+
+(set *initrepeat-filter* (make-hash-table))
+
+(define get-___initrepeat-args-filter
+  Class-name -> (get-hash (value *initrepeat-filter*) Class-name))
+
+\
+(get-hash (value *initrepeat-filter*) c___UseAccount)
+(get-hash (value *initrepeat-filter*) c___InitArgs)
+\
+
+\ Creates faust code to filter out signals which must not be used when calling ___initrepeat.
+  For instance, the filter for this class:
+  class A(int size,float b, int size2){
+    int b[size];
+    int c[size2];
+  }
+  will look like this:
+  "(_,!,_)"
+  (I.e. Only keep variables used to set array size.)
+ \
+(define create-___initrepeat-args-filter
+  []        _          -> []
+  [C|Crest] Array-vars -> ["_"|(create-___initrepeat-args-filter Crest Array-vars)] where (element? (head C) Array-vars)
+  [_|Crest] Array-vars -> ["!"|(create-___initrepeat-args-filter Crest Array-vars)])
+
+(define create-___initrepeat-args-ret
+  []        _          -> []
+  [C|Crest] Array-vars -> [(reverse C) | (create-___initrepeat-args-ret Crest Array-vars)] where (element? (head C) Array-vars)
+  [_|Crest] Array-vars -> (create-___initrepeat-args-ret Crest Array-vars))
+\
+(track create-___initrepeat-args-ret)
+\
+
+(define extract-___initrepeat-args
+  \ Intersection of array size variables and class arguments. \
+  Class-name []                          Ret -> (do (set-hash (value *initrepeat-filter*)
+                                                              Class-name 
+                                                              (generate-arg-list (create-___initrepeat-args-filter (get-class-arguments Class-name)
+                                                                                                                   Ret)))
+                                                    \ (print ["args for: " Class-name (get-class-arguments Class-name)]) \
+                                                    \(set-intersection (get-class-arguments Class-name) Ret) \
+                                                    \(get-class-arguments Class-name) \
+                                                    (create-___initrepeat-args-ret (get-class-arguments Class-name) Ret)
+                                                    )
+  Class-name [[array _ _ Expr _] | Rest] Ret -> (extract-___initrepeat-args Class-name 
+                                                                            Rest
+                                                                            (append Ret
+                                                                                    (map <_> (keep is-name? (flatten Expr)))))
+  Class-name [_                  | Rest] Ret -> (extract-___initrepeat-args Class-name Rest Ret))
+\
+(track extract-___initrepeat-args)
+\
+(define put-___initrepeat-arguments
+  Class-name Parsed -> (put-method-args Class-name 
+                                        ___initrepeat 
+                                        (extract-___initrepeat-args Class-name Parsed [])))
+
+(define is-class?
+  Class-name -> (cons? (get-hash (value *class-defs*) Class-name)))
+
+\
+(track put-___initrepeat-arguments)
+\
+
+
+\
+ The functions put-class-functype/get-class-functypes are used to
+ keep track of the class variables which are functions.
+ (i.e to support a limited higher-order function functionality)
+\
+(define put-class-functype
+  Class-name Funcname -> (let Functypes (get-class-functypes Class-name)
+                              (if (element? Funcname Functypes)
+                                  FuncTypes
+                                  (set-hash (value *class-defs*)
+                                            (get-method-func-name Class-name ___functypes) 
+                                            [Funcname | Functypes]))))
+
+(define get-class-functypes
+  Class-name -> (get-hash (value *class-defs*)
+                          (get-method-func-name Class-name ___functypes)))
+\
+(get-class-functypes c___FxCtrl)
+(get-class-functypes c___A)
+(track put-class-functype)
+\
+
+(define get-variable-type
+  Class-name Var -> (let Class-vars (append (get-class-variables Class-name "")
+                                            (get-flattened-class-variables Class-name))
+                         (nth 2 (assoc Var Class-vars))))
+\
+(get-class-arguments c___FxCtrl)
+(get-class-arguments c___MonoReverb)
+(get-class-variables c___MonoReverb "")
+(get-flattened-class-variables c___MonoReverb)
+(get-variable-type c___Comb feedback)
+(get-variable-type c___MonoReverb allpass1)
+(get-variable-type c___MonoReverb comb7___filterstore)
+(get-variable-type c___Comb retsel__)
+(assoc feedback (get-class-variables c___Comb ""))
+(get-flattened-class-variables c___MonoReverb)
+\
+(define flatten-variables
+  []                 -> []
+  [[A float  ]|Rest] -> [[A float  ]|(flatten-variables Rest)]
+  [[A int    ]|Rest] -> [[A int    ]|(flatten-variables Rest)]
+  [[A unknown]|Rest] -> [[A unknown]|(flatten-variables Rest)]
+  [[A Class  ]|Rest] -> (flatten-variables (append (get-class-variables Class A) Rest)))
+
+(define flatten-varnames
+  Variables -> (map head (flatten-variables Variables)))
+
+(define get-flattened-class-variables
+  Class-name -> (flatten-variables (get-class-variables Class-name "")))
+
+(define get-flattened-class-varnames
+  Class Instance -> (map head (flatten-variables (get-class-variables Class Instance))))
+
+(define get-class-arg-list
+  Class -> (generate-arg-list (get-flattened-class-varnames Class "")))
+
+(define get-class-arg-list2
+  Class Prefix -> (generate-arg-list (get-flattened-class-varnames Class Prefix)))
+
+\
+(generate-arg-list (get-flattened-class-varnames filter ""))
+(generate-arg-list (get-flattened-class-varnames c___Sub "s"))
+(generate-arg-list (map head (flatten-variables [["" bank]])))
+(untrack flatten-variables)
+(flatten-variables [[value float][bank0 bank]])
+(get-class-variables bank bank0)
+(get-class-variables filter "")
+(get-class-variables c___UseAccount "")
+(flatten-variables (get-class-variables sb sb0))
+(extract-class-variables (value *class-bank*))
+(track get-class-variables-0)
+(get-hash (value *class-defs*) bank)
+(get-hash (value *class-defs*) sb)
+(transform-class sb (value *class-sb*))
+(get-hash (value *class-defs*) filter)
+(get-hash (value *class-defs*) filter__filter)
+\
+
+(define get-method-func-name
+  Class-name Method -> (<_> (<-> Class-name "__" Method)))
+\
+(get-method-func-name "Bank" put)
+\
+(define get-method-func-name-old
+  [this Type] Method _                  -> (<_> (<-> Type "__" Method))
+  Ob          Method [[Ob Type] | Rest] -> (<_> (<-> Type "__" Method))
+  Ob          Method [_         | Rest] -> (get-method-name Ob Method Rest))
+
+(define delete-duplicate-variables-1
+  []       Result -> Result
+  [A|Rest] Result -> (if (empty? (assoc A Result))
+                         (delete-duplicate-variables-1 Rest (append Result [[A undefined]]))
+                         (delete-duplicate-variables-1 Rest Result)))
+
+(define delete-duplicate-variables-0
+  []                     Res Undefined -> (delete-duplicate-variables-1 Undefined Res)
+  [[N undefined] | Rest] Res Undefined -> (delete-duplicate-variables-0 Rest Res (append Undefined [N]))
+  [[A Type     ] | Rest] Res Undefined -> (if (empty? (assoc A Res))
+                                              (delete-duplicate-variables-0 Rest (append Res [[A Type]]) Undefined)
+                                              (delete-duplicate-variables-0 Rest Res Undefined)))
+
+(define delete-duplicate-variables
+  Rest -> (delete-duplicate-variables-0 Rest [] []))
+
+
+\ Used for methods
+
+  This is also a list of primitives used by the language generated after parsing!
+  (the language used inside methods, that is)
+  TODO: This list of primitives should be properly documented.
+\
+
+(define get-code-variables
+  [                       ]     -> []
+  [[int        Name |_] | Rest] -> [[(<_> Name) int]  | (get-code-variables Rest)]
+  [[float      Name |_] | Rest] -> [[(<_> Name) float]| (get-code-variables Rest)]
+  [[if _       | Code ] | Rest] -> (append (get-code-variables Code) (get-code-variables Rest))
+  [[begin      | Code ] | Rest] -> (append (get-code-variables Code) (get-code-variables Rest))
+  [[set!            |_] | Rest] -> (get-code-variables Rest)
+  [[multi-set!      |_] | Rest] -> (get-code-variables Rest)
+  [[array-set!      |_] | Rest] -> (get-code-variables Rest)
+  [[function-name-hint|_]|Rest] -> (get-code-variables Rest)
+  [[object-get Name |_] | Rest] -> [[Name unknown]      | (get-code-variables Rest)]
+  [[object-call-get Name |_] | Rest] -> [[Name unknown] | (get-code-variables Rest)]
+  [[object-call     |_] | Rest] -> (get-code-variables Rest)
+  [[object-set!     |_] | Rest] -> (get-code-variables Rest)
+  [[return          |_] | Rest] -> (get-code-variables Rest)
+  \ [_                  | Rest] -> (get-code-variables Rest) \
+  Code                          -> (do (print ["error" Code ]) (parse-error (<-> "Error in get-code-variables <" Code ">")))
+  \ internal error. (user should not see this. If this error shows up, it's because of a bug in the parser.) \
+  )
+
+
+(define extract-method-variables
+  Args Code -> (append (map (/. A [(nth 2 A) (nth 1 A)]) Args)
+                       (get-code-variables Code)))
+
+(define extract-class-variables-0
+  [                              ] -> []
+  [[array Type  Name |_]   | Rest] -> [[(<_> [Name __pos]) int] [(<_> [Name __ val]) Type] | (extract-class-variables-0 Rest)]
+  [[int         Name |_]   | Rest] -> [[(<_> Name) int]   | (extract-class-variables-0 Rest)]
+  [[float       Name |_]   | Rest] -> [[(<_> Name) float] | (extract-class-variables-0 Rest)]
+  [[Class       Name   ]   | Rest] -> [[(<_> Name) (<_> Class)] | (extract-class-variables-0 Rest)]
+  [[method Name Args|Code] | Rest] -> (append (extract-method-variables Args Code)
+                                              (extract-class-variables-0 Rest))
+  [_                       | Rest] -> (extract-class-variables-0 Rest)
+  )
+(define extract-class-variables
+  Code -> (delete-duplicate-variables (extract-class-variables-0 Code)))
+
+
+
+\ Extract all variables that are not method variables or method or class arguments. \                                  
+(define extract-class-global-variables
+  [                              ] -> []
+  [[array Type  Name |_]   | Rest] -> [[(<_> [Name __pos]) int] [(<_> [Name __ val]) Type] | (extract-class-global-variables Rest)]
+  [[int         Name |_]   | Rest] -> [[(<_> Name) int]   | (extract-class-global-variables Rest)]
+  [[float       Name |_]   | Rest] -> [[(<_> Name) float] | (extract-class-global-variables Rest)]
+  [[Class       Name   ]   | Rest] -> [[(<_> Name) (<_> Class)] | (extract-class-global-variables Rest)]
+  [_                       | Rest] -> (extract-class-variables-0 Rest)
+  )
+  
+(define get-class-global-variables
+  Class-name -> (set-subtract (get-method-args (get-method-func-name Class-name __globals__))
+                              (get-class-arguments Class-name)))
+\
+(get-class-global-variables c___Comb)
+(flatten-variables (get-class-global-variables c___Test2))
+(get-class-arguments c___Comb)
+(get-method-args (get-method-func-name c___Test2 __globals__))
+\
+(define put-class-variables
+  Class-name Code -> (let Class-args (extract-class-variables Code)
+                          Class-globals (extract-class-global-variables Code)
+                          (do (if (empty? Class-args)
+                                  (set-hash (value *class-defs*) Class-name noargs)
+                                  (set-hash (value *class-defs*) Class-name Class-args))
+                              (put-method-args Class-name __globals__ (map (/. A [(nth 2 A) (nth 1 A)]) Class-globals))
+                              (put-all-method-args Class-name Code))))
+
+\
+(track put-class-variables)
+(track extract-class-variables-0)
+(track extract-class-variables)
+(track put-class-variables)
+(get-hash (value *class-defs*) c___Sub)
+(parse)
+(track class-variables)
+(track extract-method-variables)
+(do
+ (set *class-bank*  [[float value "(50 )"]
+                     [float init]
+                     [array float fa 90 "2.3"]
+                     [method put [[float newValue]]
+                             [array-set! fa 2 30]
+                             [set! value "(newValue )"]]
+                     [method get [] 
+                             [return "(value )"]]
+                     [method inc [[float howmuch]]
+                             [object-call-get this_get_res10975 this get ""]
+                             [object-call this put "(this_get_res10975 + howmuch )"]
+                             [if "1"
+                                 [return "(value )"]
+                                 [return "(init)"]]]
+                     [method process [[float input]]
+                             [return "input+value"]]
+                     [method bank [[unknown newValue][int u1][int u2]]
+                             [set! value "(newValue )"]
+                             [set! init "(newValue )"]]])
+ (set *class-sb* [
+                  [bank bank0]
+                  [object-call bank0 ___init ["(" "" "0.2" " " ")"]]
+                  [float myvalue]
+                  [method hmm []
+                          [set! myvalue 5]
+                          [object-set! bank0 value 200]
+                          [object-call bank0 put 50]]])
+
+ (put-class-variables bank (value *class-bank*))
+ (put-class-variables sb (value *class-sb*)))
+
+(transform-class bank (value *class-bank*))
+(transform-class sb (value *class-sb*))
+(generate-class-faust-code bank (value *class-bank*))
+(generate-class-faust-code sb (value *class-sb*))
+(track transform-class)
+(value *class-sb*)
+(value *class-bank*)
+
+(get-method-args (get-method-func-name bank put))
+(get-method-args (get-method-func-name filter filter))
+(get-method-args (get-method-func-name bank bank))
+
+(parse)
+(get-class-arguments c___AllPass)
+
+(get-class-variables bank "")
+(get-class-variables bank bank0)
+(put-class-variables sb (extract-class-variables [[bank bank0]
+                                                  [float myvalue]]))
+(get-class-variables sb "")
+(untrack extract-class-variables-0)
+(track transform-class)
+
+
+\
+
+
+(define get-unique-var-0
+  A Vars Report-error -> (let Hit (assoc (<_> A) Vars)
+                              (if (empty? Hit)
+                                  (if Report-error
+                                      (parse-error (<-> "Unknown variable " A))
+                                      A)
+                                  (nth 2 Hit))))
+(define get-unique-var
+  A Vars -> (get-unique-var-0 A Vars false))
+
+(set *unique-counter* 0)
+
+(define get-unique-number
+  -> (set *unique-counter* (+ 1 (value *unique-counter*))))
+
+(define add-unique-var
+  Name Vars -> (let Unique-number (get-unique-number)
+                    Unique-name   (<_> (<-> Name "_" Unique-number))
+                    [[Name Unique-name]|Vars]))
+
+(define uniqify-fe
+  []     _    -> []
+  [A|B]  Vars -> [ (uniqify-fe A Vars)
+                   | (uniqify-fe B Vars)]
+  A      Vars -> (get-unique-var A Vars))
+
+\
+(uniqify-fe [["a" b] ";"] [[a hepp]])
+(track uniqify-get-var)
+(track uniqify-faust-expression-variables)
+\                            
+
+(define uniqify-code
+  [                     ]         Vars -> []
+  [[Type        Name |Fe] | Rest] Vars -> (let Vars2 (add-unique-var Name Vars)
+                                               [[Type (get-unique-var Name Vars2) | (uniqify-fe Fe Vars)]
+                                                | (uniqify-code Rest Vars2)])
+  where (element? Type [int float])
+  [[object-set! Ob Name Fe]         | Rest] Vars -> [[object-set! (get-unique-var Ob Vars) Name (uniqify-fe Fe Vars)]
+                                                     | (uniqify-code Rest Vars)]
+  [[object-call-get Var Ob Name Fe] | Rest] Vars -> [[object-call-get Var (get-unique-var Ob Vars) Name (uniqify-fe Fe Vars)]
+                                                     | (uniqify-code Rest Vars)]
+  [[object-call   Ob Name Fe |Rest] | Rest] Vars -> [[object-call (get-unique-var Ob Vars) Name (uniqify-fe Fe Vars)]
+                                                     | (uniqify-code Rest Vars)]
+  [A|Rest]                        Vars -> [(uniqify-code A Vars)
+                                           |(uniqify-code Rest Vars)]
+  A                               Vars -> (get-unique-var A Vars))
+
+(define uniqify-method-args
+  []                   Vars R K -> (K R Vars)
+  [[Type Name] | Rest] Vars R K -> (let Vars (add-unique-var Name Vars)
+                                        (uniqify-method-args Rest
+                                                             Vars 
+                                                             (append R [[Type (get-unique-var Name Vars)]])
+                                                             K)))
+
+(define uniqify-method
+  Name Args Code Vars -> (uniqify-method-args Args Vars []
+                                              (/. Args Vars
+                                                  [method Name Args | (uniqify-code Code Vars)])))
+\
+(uniqify-method inc [[int howmuch][float b]] [begin [object-set! this value ["howmuch"]]] [])
+(track uniqify-method-args)
+(track get-unique-var)
+(track uniqify-method)
+(track uniqify-code)
+(track uniqify-class-0)
+(track uniqify-class)
+(parse)
+\
+
+(define uniqify-class-0
+  [                             ] Vars -> []
+\  [[array Type Name | Fe] | Rest] Vars -> (let Vars (add-unique-var Name Vars)
+                                               [[array Type (get-unique-var Name Vars) | (uniqify-fe Fe Vars)] 
+                                                | (uniqify-class-0 Rest Vars)])
+  [[Type       Name | Fe] | Rest] Vars -> (let Vars (add-unique-var Name Vars)
+                                               [[Type (get-unique-var Name Vars) | (uniqify-fe Fe Vars)]
+                                                | (uniqify-class-0 Rest Vars)])
+  where (element? Type [int float]) \
+  [[method Name Args|Code] | Rest] Vars -> [(uniqify-method Name Args Code Vars)
+                                            | (uniqify-class-0 Rest Vars)]
+  [A|Rest] Vars -> [A|(uniqify-class-0 Rest Vars)]
+  )
+
+(define uniqify-class
+  Code -> (uniqify-class-0 Code []))
+
+
+
+
+\
+  Generate faust code for arrays. (size and init value)
+\
+(define generate-array-constants
+  []                                   -> ""
+  [[array Type Name Size Init] | Rest] -> (<-> "    " Name __size " = " Size ";" (newline)
+                                               "    " Name __init " = (" Init "):" Type ";" (newline)
+                                               (generate-array-constants Rest))
+  [_|Rest]                             -> (generate-array-constants Rest))
+
+
+
+(define get-process
+  [[process | Code]] -> Code
+  [_ | Rest]         -> (get-process Rest))
+
+
+(define generate-signal-selector-func-call-0
+  Name Len Len -> []
+  Name N   Len -> [(<-> "(" Name ":" (generate-signal-selector N Len) ")")
+                   | (generate-signal-selector-func-call-0 Name (+ N 1) Len)])
+
+(define generate-signal-selector-func-call
+  Name Len -> (generate-signal-selector-func-call-0 Name 0 Len))
+\
+(generate-signal-selector-func-call selvar 4)
+\
+
+
+\ This function (generate-func-call-0) is relatively clean. But the variable names could be better.
+  Res = Arguments for method call.                         (example: (unused, bank0__inc(bank0__a,bank0__b), retsel))
+  Res2 = Arguments used for the helper function signature. (example: (unused, (bank0__a,bank0__b),           retsel))
+\
+
+(define generate-func-call-0
+  Vals []                    Res Res2 Funccall K -> (K Res Res2 Funccall)
+
+  \ Method call? \
+  Vals [[Varname Type]|Rest] Res Res2 Funccall K -> (generate-func-call-0 Vals Rest
+                                                                          (append Res  (list (nth 2 (assoc Varname Vals))))
+                                                                          (append Res2 (list (generate-arg-list (map head (flatten-variables [[Varname Type]])))))
+                                                                          (nth 2 (assoc Varname Vals))
+                                                                          K)
+  where (and (assoc? Varname Vals)
+             (type-is-class? Type))
+
+  Vals [[Varname Type]|Rest] Res Res2 Funccall K -> (generate-func-call-0 Vals Rest
+                                                                          (append Res  [(nth 2 (assoc Varname Vals))])
+                                                                          (append Res2 [(nth 2 (assoc Varname Vals))])
+                                                                          Funccall K) 
+  where (assoc? Varname Vals)
+
+  \ Method call? (what's the difference between these two?) \
+  Vals [[Varname Type]|Rest] Res Res2 Funccall K -> (generate-func-call-0 Vals (flatten-variables [[Varname Type]])
+                                                                          Res
+                                                                          Res2
+                                                                          Funccall
+                                                                          (/. Res Res2 Funccall
+                                                                              (generate-func-call-0 Vals Rest
+                                                                                                    Res Res2
+                                                                                                    Funccall K)))
+  where (type-is-class? Type)
+  Vals [[Varname Type]|Rest] Res Res2 Funccall K -> (generate-func-call-0 Vals Rest
+                                                                          (append Res [Varname])
+                                                                          (append Res2   [Varname])
+                                                                          Funccall K))
+  
+
+(define generate-func-call
+  Funcname [[this Val]] Variables -> (let Selvar (gensym "newthis")
+                                          (generate-func-call Funcname [[Selvar Val]] Variables))
+  Funcname Vals Variables -> (generate-func-call-0 Vals Variables [] [] normal
+                                                   (/. Args Funccall-vars Funccall
+                                                       (if (= normal Funccall)
+                                                           [func-call Funcname | Args]
+                                                           [func-call-with Funccall-vars Funccall Funcname Variables | Args]))))
+
+\
+(map head (flatten-variables [[bank0 bank]]))
+(map head (flatten-variables [[sb0 sb]]))
+(track generate-func-call-0)
+(track generate-func-call)
+
+(generate-func-call dasfuncname [[bank0___value 2]] (get-class-variables sb ""))
+(generate-func-call dasfuncname [[this "call()"]] (get-class-variables sb ""))
+(generate-func-call dasfuncname [[this "call(sb0)"]] [[afloat float][anint int][i int][sb0 sb][bank0 bank]])
+
+(generate-func-call dasfuncname [[sb0 "call(sb0)"][afloat 50.0]] [[afloat float][anint int][i int][sb0 sb][bank0 bank]])
+(generate-func-call dasfuncname [[this "call(sb0)"][afloat 50.0]] [[afloat float][anint int][i int][sb0 sb][bank0 bank]])
+(generate-func-call dasfuncname [[i 50]] [[afloat float][anint int][i int]])
+(get-class-variables sb sb0)
+(track generate-func-call)
+(track generate-func-call-0)
+(transform-class bank (value *class-bank*))
+(transform-class sb (value *class-sb*))
+(flatten-variables [[myvalue float][bank0 bank]])
+(track transform-class)
+(value *class-bank*)
+(value *class-sb*)
+(generate-func-call dasfuncname [[i 50]] [[afloat float][anint int][i int]])
+(get-class-variables sb "sb0")
+(get-type sb0 [[sb0 sb]])
+\
+
+(define generate-func-call-with-method-call-1
+  this Method-name Variables 
+  -> [(flatten-varnames Variables)]
+  Object-name Method-name [[Object-name Class-name]|Rest]
+  -> (cons (flatten-varnames [[Object-name Class-name]])
+           (flatten-varnames Rest))
+  Object-name Method-name [A | Rest] 
+  -> (append (flatten-varnames [A])
+             (generate-func-call-with-method-call-1 Object-name Method-name Rest)))
+
+(define generate-func-call-with-method-call-0
+  this Method-name Variables 
+  -> [(<-> (get-method-func-name (curr-class) Method-name) (generate-arg-list (flatten-varnames Variables)))]
+  Object-name Method-name [[Object-name Class-name]|Rest]
+  -> (cons (<-> (get-method-func-name Class-name Method-name) (generate-arg-list (flatten-varnames [[Object-name Class-name]])))
+           (flatten-varnames Rest))
+  Object-name Method-name [A | Rest] 
+  -> (append (flatten-varnames [A])
+             (generate-func-call-with-method-call-0 Object-name Method-name Rest)))
+\
+(flatten-varnames [[bank0 bank][myvalue float]])
+(generate-func-call-with-method-call-0 bank0 process [[anint int][bank0 bank] [myvalue float] [retsel__ int]])
+->
+[anint ["bank__process(bank0___value, bank0___init, bank0___fa__pos, bank0___fa__val, bank0___newValue, bank0___howmuch, bank0___this_get_res10975, bank0___input, bank0___u1, bank0___u2, bank0___retsel__)"]
+ myvalue retsel__]
+\
+
+(define generate-func-call-with-method-call
+  Funcname Object-name Method-name Variables -> [func-call-with-method-call Funcname 
+                                                                            (generate-func-call-with-method-call-0 Object-name Method-name Variables)
+                                                                            (generate-func-call-with-method-call-1 Object-name Method-name Variables)
+                                                                            (flatten-varnames Variables)])
+\
+old, slow:
+  Funcname Object-name Method-name Variables -> (let Object-type (get-type Object-name Variables)
+                                                     Object-vars (get-flattened-class-varnames Object-type Object-name)
+                                                     [func-call-with-method-call Funcname 
+                                                                                 (<-> (get-method-func-name Object-type Method-name) (generate-arg-list Object-vars))
+                                                                                 Object-vars
+                                                                                 (flatten-varnames Variables)
+                                                                                 ]))
+\
+                                                 
+\
+(generate-func-call-with-method-call Funcname bank0 process [[bank0 bank] [myvalue float] [retsel__ int]])
+->
+[func-call-with-method-call Funcname
+                            "bank__process(bank0___value, bank0___init, bank0___fa__pos, bank0___fa__val, bank0___newValue)"
+                            [bank0___value bank0___init bank0___fa__pos bank0___fa__val bank0___newValue
+                                           bank0___howmuch bank0___this_get_res10975 bank0___input bank0___u1 bank0___u2
+                                           bank0___retsel__]
+                            [bank0___value bank0___init bank0___fa__pos bank0___fa__val bank0___newValue
+                                           bank0___howmuch bank0___this_get_res10975 bank0___input bank0___u1 bank0___u2
+                                           bank0___retsel__ myvalue retsel__]
+                            ]
+
+heller:
+[func-call-with-method-call Funcname
+                            [["bank__process(bank0___value, bank0___init, bank0___fa__pos, bank0___fa__val, bank0___newValue)"]
+                             myvalue retsel__]
+                            [[bank0___value bank0___init bank0___fa__pos bank0___fa__val bank0___newValue
+                                            bank0___howmuch bank0___this_get_res10975 bank0___input bank0___u1 bank0___u2
+                                            bank0___retsel__]
+                             myvalue retsel__]
+                            ]
+
+(do (push-class sb)
+    (generate-func-call-with-method-call Funcname this hmm [[bank0 bank] [myvalue float] [retsel__ int]]))
+->
+[func-call-with-method-call Funcname
+                            "sb___hmm(bank0___value bank0___init bank0___fa__pos bank0___fa__val bank0___newValue
+                                      bank0___howmuch bank0___this_get_res10975 bank0___input bank0___u1 bank0___u2
+                                      bank0___retsel__ myvalue retsel__)"
+                            [bank0___value bank0___init bank0___fa__pos bank0___fa__val bank0___newValue
+                                           bank0___howmuch bank0___this_get_res10975 bank0___input bank0___u1 bank0___u2
+                                           bank0___retsel__ myvalue retsel__]
+                            [bank0___value bank0___init bank0___fa__pos bank0___fa__val bank0___newValue
+                                           bank0___howmuch bank0___this_get_res10975 bank0___input bank0___u1 bank0___u2
+                                           bank0___retsel__ myvalue retsel__]]
+                            
+(generate-faust-code-1 (generate-func-call-with-method-call "func13245" bank0 process [[bank1 bank][bank0 bank] [myvalue float] [retsel__ int]]))
+
+(do (push-class sb)
+    (generate-faust-code-1 (generate-func-call-with-method-call "func13245" this process [[myvalue float] [retsel__ int]])))
+
+(get-flattened-class-varnames (get-type this [[bank0 bank] [myvalue float] [retsel__ int]]) this)
+(get-type bank0 [[bank0 bank] [myvalue float] [retsel__ int]])
+(get-flattened-class-varnames sb ""))))
+(flatten-varnames [[bank0 bank]])
+(generate-arg-list [[2 3] 4])
+\
+
+(define get-new-Fname
+  -> (gensym "func__"))
+
+
+\ Set initial values for int/float outside process{} \  
+(define get-init-vars
+  [[process | _]|_]       -> []
+  [[array       |_]|Rest] -> (get-init-vars Rest)
+  [[int   Name]    |Rest] -> (get-init-vars Rest)
+  [[float Name]    |Rest] -> (get-init-vars Rest)
+  [[Type Name Init]|Rest] -> [[Name (<-> "(" Init "):" Type)]|(get-init-vars Rest)]
+  where (element? Type [int float]))
+  
+(define generate-first-func
+  Name Code K Vars -> [Name [if not_first_iteration__
+                                (generate-func-call K [[not_first_iteration__ 1]] Vars)
+                                (generate-func-call K [[not_first_iteration__ 1]|(get-init-vars Code)] Vars)]])
+
+\  Name Code K Vars -> [Name (generate-func-call K [] Vars)] \
+
+
+\
+(get-init-vars (parse))
+(generate-first-func func0 (parse) func1 (get-variables (parse)))
+(generate-func-call dasfuncname [[i 50][u 100]] (get-variables (parse)))
+\
+
+\
+[return <notused>] means that the method ended without returning anything.
+[return S]         means that the method returns S.
+\
+(define transform-returns-0
+  []                              _ _        Res Retvals K -> (K Res Retvals)
+  [Fname [return <notused>]|Rest] N Varnames Res Retvals K -> (transform-returns-0 Rest N       Varnames
+                                                                                   (append Res [Fname [list | Varnames]])
+                                                                                   Retvals K)
+  [Fname [return S]        |Rest] N Varnames Res Retvals K -> (transform-returns-0 Rest (+ N 1) Varnames
+                                                                                   (append Res [Fname [list | (append (butlast Varnames) [N])]])
+                                                                                   (append Retvals [S])
+                                                                                   K)  
+  [A     B                 |Rest] N Varnames Res Retvals K -> (transform-returns-0 Rest N Varnames (append Res [A B]) Retvals K))
+
+\
+(untrack transform-returns-0)
+\
+
+(define transform-returns-1
+  _ []       -> "" \(parse-error "process contains no returns") \
+  _ [A]      -> (<-> A)
+  N [A|Rest] -> (<-> "if__( (retsel__ ==" N ")"
+                     ", " A
+                     ", " (transform-returns-1 (+ N 1) Rest)
+                     ")"))
+
+
+\ 'Code' is the output of transform-code! \
+
+(define transform-returns
+  Prefix Code Varnames -> (transform-returns-0 Code 0
+                                               (set-subtract Varnames (get-class-functypes (curr-class))) \ Never return functions! \
+                                               [] []
+                                               (/. Code Returnvals
+                                                   (let Return-name (<_> (<-> Prefix return__))
+                                                        Return-code (transform-returns-1 0 Returnvals)
+                                                        (if (= Return-code "")
+                                                            Code
+                                                            (append Code
+                                                                    [return Return-name Return-code]))))))
+
+\
+(transform-returns 
+ (transform-strip-unused-functions 
+  (transform (get-process (parse))
+             (get-variables (parse))
+             (get-new-Fname)
+             false))
+ (get-variables (parse)))
+(track transform-returns)
+\
+
+(define transform-find-calls-0
+  []                                          -> []
+  [Fname [return _]                    |Rest] -> (transform-find-calls-0 Rest)
+  [Fname [if _ [_ Name1|_] [_ Name2|_]]|Rest] -> [Name1 Name2  | (transform-find-calls-0 Rest)]
+  [Fname [if _ [_ Name1|_]            ]|Rest] -> [Name1        | (transform-find-calls-0 Rest)]
+  [Fname [func-call Name    | _   ]    |Rest] -> [Name         | (transform-find-calls-0 Rest)]
+  [Fname [func-call-with-method-call Name |_] | Rest] -> [Name | (transform-find-calls-0 Rest)])
+
+(define transform-find-calls
+  [Fname | Rest] -> [Fname | (transform-find-calls-0 [Fname|Rest])]) \ Include first function. \
+
+(define transform-strip-unused-functions-0
+  []                  Calls -> []
+  [Fname Call | Rest] Calls -> [Fname Call | (transform-strip-unused-functions-0 Rest Calls)] where (element? Fname Calls)
+  [_     _    | Rest] Calls -> (transform-strip-unused-functions-0 Rest Calls))
+
+\ Shallow stripping only! \
+(define transform-strip-unused-functions
+  Code -> (transform-strip-unused-functions-0 Code (transform-find-calls Code)))
+
+\
+(PPRINT (transform-find-calls 
+         (transform (get-process (parse))
+                    (get-variables (parse))
+                    (get-new-Fname)
+                    false)))
+(PPRINT (transform-strip-unused-functions 
+         (transform (get-process (parse))
+                    (get-variables (parse))
+                    (get-new-Fname)
+                    false)))
+(PPRINT (transform (get-process (parse))
+                   (get-variables (parse))
+                   (get-new-Fname)
+                   false))
+(get-process (parse))
+\
+
+(define generate-signal-selector-0
+  N _   N   -> ""
+  N Pos Len -> (if (= N Pos) "_" "!") where (= N (- Len 1))
+  N Pos Len -> (<-> (if (= N Pos) "_" "!") "," (generate-signal-selector-0 (+ N 1) Pos Len)))
+
+(define generate-signal-selector
+  0   0   -> (parse-error "Error in generate-signal-selector. This is not supposed to happen.")
+  0   1   -> "_"
+  Pos Len -> (<-> "(" (generate-signal-selector-0 0 Pos Len) ")"))
+\
+(list (generate-signal-selector 0 3)
+      (generate-signal-selector 1 3)
+      (generate-signal-selector 2 3))
+\
+
+(define transform-method-call-args-0
+  Object []                N N   _    -> []
+  Object [[Name1 _]|Rest1] N Len Args -> [ [object-set! Object Name1 (<-> "(" Args ")" ":" (generate-signal-selector N Len))]
+                                           | (transform-method-call-args-0 Object Rest1 (+ N 1) Len Args)])
+(define transform-method-call-args
+  Object M-args Args -> (transform-method-call-args-0 Object M-args 0 (length M-args) Args))
+\
+(transform-method-call-args b0 [[newValue float][someval int]] "2.5,900")
+(get-class-variables bank "")
+(track transform-method-call-args)
+(track get-method-args)
+(get-method-args (get-method-func-name c___Comb ___init))
+(get-method-args (get-method-func-name c___Comb ___initrepeat))
+\
+
+\ (transform-method-call == transform-object-call) \
+(define transform-method-call Object Class Method-name Args ->
+  (let Method-args (get-method-args (get-method-func-name Class Method-name))
+       Object-sets (transform-method-call-args Object Method-args Args)
+       (append Object-sets
+               [[object-call-clean Object Method-name]])))
+
+\       [Fname ojbect-get-call Method-name Var Ob Method Args 60 Vars] \
+
+\
+(transform-method-call b0 bank inc "2.3")
+(track transform-method-call)
+(track get-method-func-name)
+(track get-method-args)
+
+[object-call [b0 bank] get this_get_res10975 [2 3]]
+->
+(set! this_get_res10975 (bank__get a b)), 
+  args          = [[b0 bank][b float][c int][a int]],
+  bank_args     = [b float][c int][a int]
+  bank_get_args = [c int][a int]
+->
+(object-set! [b0 bank] c a)
+(object-set! [b0 bank] a b)
+(bank__get b0)
+(set! this_get_res10975 (bank__get__return))
+\
+
+
+(define transform-object-call-get Retvar Object Class Method Args ->
+  (let Methodretfunc-name (<-> (get-method-func-name Class Method) "__return__")
+       Retvar-argstring (get-class-arg-list2 Class Object)
+       (append (transform-method-call Object Class Method Args)
+               [[set! Retvar (<-> Methodretfunc-name Retvar-argstring)]])))
+\
+das_retvar = b0.inc(50);
+->
+(transform-object-call-get das_retvar b0 bank inc [50])
+->
+[ [object-set! b0 howmuch 50]
+  [set! b0 bank__inc(b0)]
+  [set! das_retvar bank__inc__return(<bankars>)]
+(get-class-arg-list c___AllPass)
+\
+
+(define transform-object-set!-2
+  [A | Rest2] -> (transform-object-set!-2 [(transform-object-set!-1 A) | Rest2]) where (cons? A)
+  [A]         -> A
+  [A B]       -> (<-> A "," (transform-object-set!-1 B)) where (cons? B)
+  [A B]       -> (<-> A "," B)
+  [A | Rest]  -> (<-> A "," (transform-object-set!-2 Rest)))
+
+(define transform-object-set!-1
+  A -> (<-> "(" (transform-object-set!-2 A) ")"))
+\
+(untrack transform-object-set!-2)
+(map transform-object-set!-1 [[1]
+                              [2 3 4]
+                              [[5 6]]
+                              [[5 6] 7]
+                              [8 [9 10]]
+     ])
+\
+(define transform-object-set!-0
+  []                 _      _   -> []
+  [[Name1 Type]|Rest] Name2 Val -> [(if (= Name1 Name2) (<-> "!:(" Val ")") "_")
+                                    | (transform-object-set!-0 Rest Name2 Val)] 
+  where (element? Type [int float unknown])
+  [[Name1 Type]|Rest] Name2 Val -> [(transform-object-set!-0 (get-class-variables Type "") unused_name____ unused_value___)
+                                    | (transform-object-set!-0 Rest Name2 Val)])
+
+(define transform-selector Invars Vars Selector-var Newval -> 
+  (<-> "(" Invars ":" (transform-object-set!-1 (transform-object-set!-0 Vars Selector-var Newval)) ")"))
+
+\
+'transform-object-set!' does the following transformations:
+
+  (object-set! [b0 bank] value "9.2")
+->
+  (set! b0 "(b0 : (_,!:(9.2),_))")
+
+  (object-set! [sb0 sb] myvalue "9.3")
+->
+  (set! sb0 "(sb0 : ((_,_,_),!:(9.3)))")
+                     ^^^^^^^
+                    sb0.bank0
+\
+(define transform-object-set!
+  Ob Attribute Value -> [[set! (get-object-variable-name Ob Attribute) Value]])
+\
+      (let Class-vars (get-class-variables Class "")
+           [[set! Ob (transform-selector Ob Class-vars Attribute Value)]])
+\
+\
+(transform-object-set! sb0 myvalue "9.3")
+(transform-object-set! b0 value "9.2")
+(get-class-variables bank "")
+(get-class-variables sb "sb0")
+(track get-method-func-name)
+(track transform-object-set!-1)
+(track transform-object-set!)
+(transform-class sb (value *class-sb*))
+(untrack transform-code)
+\
+
+(define get-type
+  Name curr -> (get-type Name (get-class-variables (curr-class) ""))
+  Name Vars -> (let Ass (assoc Name Vars)
+                    (if (empty? Ass)
+                        (if (= Name this)
+                            (curr-class)
+                            (parse-error (<-> "'" Name "' is undefined. (Not a member in: " (generate-arg-list (map head Vars)) ")")))
+                        (nth 2 Ass))))
+
+(define type-is-class?
+  Type -> (not (element? Type [int float unknown])))
+
+(define type-may-be-function?
+  unknown -> true
+  _       -> false)
+
+
+\
+  Vars  = List of all variables used in function calls and function signatures.
+  Fname = Name of the current function.
+  K     = Name of the function to call when the current {} block ends.
+\
+(define transform-code
+  [                                ] Vars Fname false -> [Fname [return <notused>]]
+  [                                ] Vars Fname K -> [Fname (generate-func-call K [] Vars)]
+  [[int         Name]        | Rest] Vars Fname K -> (transform-code Rest Vars Fname K)
+  [[float       Name]        | Rest] Vars Fname K -> (transform-code Rest Vars Fname K)
+  [[int         Name Value]  | Rest] Vars Fname K -> (transform-code [[set! Name Value] | Rest] Vars Fname K)
+  [[float       Name Value]  | Rest] Vars Fname K -> (transform-code [[set! Name Value] | Rest] Vars Fname K)
+  [[begin | Code]            | Rest] Vars Fname K -> (let Restname (get-new-Fname)
+                                                          (append (transform-code Code Vars Fname    Restname)
+                                                                  (transform-code Rest Vars Restname K)))
+  [[if Cond T1]              | Rest] Vars Fname K -> (let T1name   (get-new-Fname)
+                                                          Restname (get-new-Fname)
+                                                          T1code   (transform-code [T1] Vars T1name Restname)
+                                                          Restcode (transform-code Rest Vars Restname K)
+                                                          (append  [Fname [if Cond 
+                                                                              (generate-func-call T1name [] Vars)
+                                                                              (generate-func-call Restname [] Vars)]]
+                                                                   T1code
+                                                                   Restcode
+                                                                   ))
+  [[if Cond T1 T2]           | Rest] Vars Fname K -> (let T1name   (get-new-Fname)
+                                                          T2name   (get-new-Fname)
+                                                          Restname (get-new-Fname)
+                                                          T1code   (transform-code [T1] Vars T1name Restname)
+                                                          T2code   (transform-code [T2] Vars T2name Restname)
+                                                          Restcode (transform-code Rest Vars Restname K)
+                                                          (append  [Fname [if Cond 
+                                                                              (generate-func-call T1name [] Vars)
+                                                                              (generate-func-call T2name [] Vars)]]
+                                                                   T1code
+                                                                   T2code
+                                                                   Restcode
+                                                                   ))
+\
+  [[set! this Value]         | Rest] Vars Fname K -> (let Restname (get-new-Fname)
+                                                          [Fname [func-call Restname (<-> (transform-object-set!-1 (map head Vars)))]
+                                                                 | (transform-code Rest Vars Restname K)])
+\
+  [[set! Name Value]         | Rest] Vars Fname K -> (let Restname (get-new-Fname)
+                                                          (do \ (print ["hepp" [set! Name Value] "->" (generate-func-call Restname [[Name Value]] Vars) "vars:" Vars (newline)]) \
+                                                              [Fname (generate-func-call Restname [[Name Value]] Vars)
+                                                                     | (transform-code Rest Vars Restname K)]))
+  [[multi-set! [Name] Value]   | Rest] Vars Fname K -> (transform-code [[set! Name Value] | Rest] Vars Fname K)
+  [[multi-set! Names Value]   | Rest] Vars Fname K -> (let Restname (get-new-Fname)
+                                                           [Fname (generate-func-call Restname (zip Names
+                                                                                                    (generate-signal-selector-func-call (<-> "(" Value ")")
+                                                                                                                                        (length Names)))
+                                                                                      Vars)
+                                                                  | (transform-code Rest Vars Restname K)])
+  [[array-set! Array Pos Val]| Rest] Vars Fname K -> (let Restname (get-new-Fname)
+                                                          [Fname (generate-func-call Restname [[(concat Array __pos) Pos] [(concat Array __val) Val]] Vars)
+                                                                 | (transform-code Rest Vars Restname K)])
+  [[function-name-hint Funcname]|Rest] Vars Fname K -> (if (empty? (assoc Funcname Vars))
+                                                           (transform-code Rest Vars Fname K) \ a faust function \
+                                                           (let Type (get-type Funcname Vars)
+                                                                (if (not (type-may-be-function? Type))
+                                                                    (parse-error (<-> "'" Funcname "' is not a function."))
+                                                                    (do (put-class-functype (curr-class) Funcname)
+                                                                        (transform-code Rest Vars Fname K)))))
+  \ 'object-call-clean' elements are generated by 'object-call' and 'object-call-get' ! \
+  [[object-call-clean Ob Method]|Rest]        Vars Fname K -> (let Restname (get-new-Fname)
+                                                                   [Fname (generate-func-call-with-method-call Restname Ob Method Vars)
+                                                                          | (transform-code Rest Vars Restname K)])
+  [[object-call Ob Method Args]|Rest]         Vars Fname K -> (transform-code
+                                                               (append (transform-method-call Ob (get-type Ob Vars) Method Args) 
+                                                                       Rest)
+                                                               Vars Fname K)
+  [[object-call-get Retvar Ob Method Args]|Rest] Vars Fname K -> (transform-code
+                                                                  (append (transform-object-call-get Retvar Ob (get-type Ob Vars) Method Args)
+                                                                          Rest)
+                                                                  Vars Fname K)
+  [[object-get Retvar Ob Attribute ] | Rest]     Vars Fname K -> (transform-code
+                                                                  (append [[set! Retvar (get-object-variable-name Ob Attribute)]]
+                                                                          Rest)
+                                                                  Vars Fname K)
+  [[object-set! Ob Attr Val ]| Rest] Vars Fname K -> (transform-code
+                                                      (append (transform-object-set! Ob Attr Val)
+                                                              Rest)
+                                                      Vars Fname K)
+  [[return Val              ]| _   ] Vars Fname K -> [Fname [return Val]]
+  )
+\
+(transform-class bank (value *class-bank*))
+(track generate-func-call)
+(parse)
+
+(transform-class sb (value *class-sb*))
+(get-class-variables bank "")
+(get-class-variables sb "")
+(flatten-variables (get-class-variables sb ""))
+(value *class-bank*)
+(track transform-code)
+(track transform-class)
+(track generate-func-call)
+(track flatten-variables)
+(parse)
+
+ [method-call func__1530 bank bank0 bank__put]
+->
+(let Call "bank__put(bank0___value2_201, bank0___value_200,bank0___this_callget_res1511, bank0___howmuch_199, bank0___value_198,bank0___init, bank0___value)"
+     (generate-func-call func__1530 [[bank0 Call]] (get-class-variables sb "")))
+\
+
+
+\
+  'push-class', 'pull-class' and 'curr-class' are used to find out which
+  class is currently being transformed. It's not functional, but
+  the alternative is sending around another local variable to functions.
+  (IOW it makes source code slightly less verbose)
+\
+(set *class-stack* [])
+(define push-class
+  Class -> (set *class-stack* [Class | (value *class-stack*)]))
+(define pull-class
+  -> (set *class-stack* (nth-cdr 2 (value *class-stack*))))
+(define curr-class
+  -> (nth 1 (value *class-stack*)))
+
+
+\ @$%%!#$%, this code is correct but faust ~never finish compiling freeverb if it's enabled! \
+(define generate-type-cast-code-0
+  []                       -> []
+\ uncomment code below to achieve ~infinite compilation times \
+  [[Varname float] | Rest] -> [[set! Varname (list "float(" Varname ")")]
+                               | (generate-type-cast-code-0 Rest)]
+  [[Varname int  ] | Rest] -> [[set! Varname (list "int(" Varname ")")]
+                               | (generate-type-cast-code-0 Rest)]
+  [A               | Rest] -> (generate-type-cast-code-0 Rest))
+
+(define generate-type-cast-code
+  Class-name Method-name -> (generate-type-cast-code-0 (get-method-args (get-method-func-name Class-name Method-name))))
+
+\
+(define generate-type-cast-code
+  Class-name Method-name -> [])
+\
+
+\  
+(generate-type-cast-code c___PitchShift ___init)
+(get-method-args (get-method-func-name c___PitchShift ___init))
+\
+
+
+(define transform-class-method-0
+  Class-name Code Method-name -> (transform-returns (<-> Class-name "__" Method-name "__")
+                                                    (transform-strip-unused-functions (transform-code (append (if (= ___initrepeat Method-name)
+                                                                                                                  (generate-type-cast-code Class-name ___init)
+                                                                                                                  (generate-type-cast-code Class-name Method-name))
+                                                                                                              Code)
+                                                                                                      (get-class-variables Class-name "")
+                                                                                                      (get-new-Fname) false))
+                                                    (get-flattened-class-varnames Class-name "")))
+
+(define transform-class-method
+  Class-name Name Args Code -> [method Name (transform-class-method-0 Class-name Code Name)])
+\
+(track get-class-variables)
+(track transform-class-method)
+(track transform-code)
+(parse)
+(get-class-variables c___PitchShift "")
+\
+
+(define transform-class-methods
+  []                                 _          -> []
+  [[method Name Args | Code] | Rest] Class-name -> [(transform-class-method Class-name Name Args Code)
+                                                    |(transform-class-methods Rest Class-name)]
+  [_                         | Rest] Class-name -> (transform-class-methods Rest Class-name))
+
+  
+
+\ The ___initrepeat method is always called before process when accessed from faust.
+  The only purpose it has (so far) is to set array size. This needs to be done directly
+  since Faust doesn't figure out the size of an array if the integer holding the size
+  goes through a recursive operator.
+\
+(define transform-class-gen-initrepeat-method
+  []                                     -> []
+  [[object-call Ob ___init Args] | Rest] -> (append [[object-call Ob ___initrepeat (<-> Args
+                                                                                        " : "
+                                                                                        (get-___initrepeat-args-filter (get-type Ob curr)))]]
+                                                    (transform-class-gen-initrepeat-method Rest))
+  where (is-initrepeat___-required? (get-type Ob curr)) \ Must be here to avoid generating this code: "(one_signal : (!))". \
+  [_                             | Rest] -> (transform-class-gen-initrepeat-method Rest))
+
+\
+(get-type account curr)
+(track transform-class-gen-initrepeat-method)
+(track get-class-variables)
+(track is-initrepeat___-required?)
+(is-initrepeat___-required? c___InitArgs)
+(parse)
+\
+
+
+(set *required-init___-methods* [])
+
+(define add-required-init___-method
+  Class-name -> (set *required-init___-methods* [Class-name | (value *required-init___-methods*)]))
+
+(define is-init___-required?
+  Class-name -> (element? Class-name (value *required-init___-methods*)))
+
+(define is-initrepeat___-required?
+  Class-name -> (cons? (get-___initrepeat-arguments Class-name)))
+
+\
+(is-initrepeat___-required? c___InitArgs)
+(is-init___-required? c___Caller)
+(is-init___-required? c___InitArgs)
+(value *required-init___-methods*)
+\
+(define transform-class-gen-init-method
+  []                             -> []
+  [[method | _ ]        | Rest]  -> (transform-class-gen-init-method Rest)
+  [[array _ Name _ Val] | Rest]  -> (append [[set! (<_> (<-> Name __val)) Val]] \ In case we read before writing to the array. \
+                                            (transform-class-gen-init-method Rest))
+  where (not (element? Val ["0" "0.0"]))
+  [[array  | _ ]        | Rest]  -> (transform-class-gen-init-method Rest)
+  [[Type Varname Value] | Rest]  -> (append [[set! Varname Value]]
+                                            (transform-class-gen-init-method Rest))
+  where (is-type?-are-names? Type [Varname])
+
+  [[Type Varname]       | Rest]  -> (transform-class-gen-init-method Rest)
+  where (is-type?-are-names? Type [Varname])
+
+\
+  [[object-call Ob ___init Args] | Rest]  -> (if (is-init___-required? (get-type Ob curr))
+                                                 (append [[object-call Ob  ___init Args]]
+                                                         (transform-class-gen-init-method Rest))
+                                                 (transform-class-gen-init-method Rest))
+  where (are-names? [Ob])
+\
+  [A                    | Rest]  -> (append [A]
+                                           (transform-class-gen-init-method Rest)))
+
+(define transform-class-gen-init-methods
+  Code -> (let Initrepeat-code (transform-class-gen-initrepeat-method Code)
+               Init-code (transform-class-gen-init-method Code)
+               (do (if (cons? Init-code)
+                       (add-required-init___-method (curr-class))
+                       false)
+                   [[method ___initrepeat [] | Initrepeat-code]
+                    [method ___init       [] | Init-code]])))
+
+\
+(parse)
+(track transform-class-gen-init-method)
+(track transform-class-gen-initrepeat-method)
+(track add-required-init___-method)
+(track is-init___-required?)
+(track transform-class-gen-init-method)
+(track transform-class-gen-init-methods)
+(track transform-class-gen-init-method)
+
+  [method ___init [] | (transform-class-gen-init-method Code)]
+(untrack get-method-args)
+(value *required-init___-methods)
+
+Sjekk her:
+(get-class-variables c___MonoReverb "")
+(get-variable-type c___FxCtrl wet)
+(type-is-class? (get-variable-type c___FxCtrl wet))
+(type-is-class? (get-variable-type c___FxCtrl c___Fx))
+(type-is-class? (get-variable-type c___MonoReverb comb7))
+(get-variable-type c___MonoReverb allpass1)
+(get-variable-type c___MonoReverb comb7)
+Bruk denne til å finne ut om det er en klasse.
+(track get-variable-type)
+ \
+
+(define transform-class
+  Class-name Code -> (do (push-class Class-name)
+                         (put-class-variables Class-name Code)
+                         (let Ret (transform-class-methods (append Code
+                                                                   (transform-class-gen-init-methods Code))
+                                                           Class-name)
+                              (do (pull-class)
+                                  Ret))))
+
+\
+(track transform-class-gen-init-methods)
+(track transform-class-methods)
+(track transform-class)
+(track transform-class-0)
+(track put-class-variables)
+(parse)
+(untrack transform-class-method)
+(track transform-code)
+(untrack <->-macro)
+(transform-class bank (value *class-bank*))
+\
+
+
+
+
+\ [a b [c d] e] -> "(a,b,(c,d),e)" \
+(define generate-dimarg-list-0
+  []              -> ""
+  [Var]           -> (generate-dimarg-list Var) where (cons? Var)
+  [Var]           -> Var
+  [Var|Variables] -> (<-> (generate-dimarg-list Var) ", " (generate-dimarg-list-0 Variables)) where (cons? Var)
+  [Var|Variables] -> (<-> Var ", " (generate-dimarg-list-0 Variables)))
+
+(define generate-dimarg-list
+  []              -> "" \ () is not allowed in faust. \
+  Variables       -> (<-> "(" (generate-dimarg-list-0 Variables) ")"))
+
+
+\ [a b c d] -> "(a,b,c,d)" \
+(define generate-arg-list-0
+  []              -> ")"
+  [Var|[]]        -> (<-> Var ")") 
+  [Var|Variables] -> (<-> Var ", " (generate-arg-list-0 Variables)))
+(define generate-arg-list
+  []              -> "" \ () is not allowed in faust. \
+  Variables       -> (<-> "(" (generate-arg-list-0 Variables)))
+
+\
+(generate-arg-list [a])
+(generate-arg-list [a b c d])
+(generate-arg-list [[a]])
+(generate-arg-list [a [b]])
+(generate-arg-list [a b [c d] e])
+(generate-arg-list ["_" "_" "!"])
+(generate-arg-list [[] []])
+\
+
+(define generate-faust-function-signature
+  return__ Variables -> (<-> return__ (generate-arg-list (append (map head (flatten-variables Variables)) [n__])) " = " (newline))
+  Label    Variables -> (<-> Label    (generate-arg-list (map head (flatten-variables Variables)))                " = " (newline)))
+
+\
+(untrack <->)
+(generate-faust-function func344            (get-variables (value *program*)))
+(generate-faust-function func344 [[a b]])
+(get-variables (value *program*))
+(<-> (map head (get-variables (value *program*))))
+(track generate-faust-code-1)
+\
+
+(define generate-identity-func-0
+  0 -> ")"
+  1 -> "_)"
+  N -> (<-> "_," (generate-identity-func-0 (- N 1))))
+
+(define generate-identity-func
+  N -> (<-> "(" (generate-identity-func-0 N)))
+
+(define generate-faust-code-1
+  [func-call Function | Class-args] -> (<-> "    " Function (generate-arg-list Class-args))
+  [func-call-with-method-call Function Method-call-args Helperfunc-args Class-args]
+  -> (let Helperfunc (gensym "helper")
+          (<-> "    " Helperfunc (generate-dimarg-list Method-call-args) " with{" (newline)
+               "           " Helperfunc (generate-dimarg-list Helperfunc-args) " = " (newline)
+               "              " Function (generate-arg-list Class-args)
+               ";}"))
+\
+Old, and slow:
+  [func-call-with-method-call Function Method-func-call Modified-vars Args]
+  -> (let Helperfunc (gensym "helper")
+          (<-> "    " Helperfunc "(" Method-func-call ") with{" (newline)
+               "         " Helperfunc "(" (generate-arg-list Modified-vars) ") = " (newline)
+               "            " Function (generate-arg-list Args) ";" (newline)
+               "      }" (newline)))
+\
+  [if Cond T1 T2]             -> (<-> "    if__(" Cond ", " (generate-faust-code-1 T1) ", " (generate-faust-code-1 T2) ")")
+  [list               | Args] -> (<-> "    " (generate-arg-list Args)) \ return \
+  A                           -> (<-> "    " A))
+
+(define generate-faust-code-call-1
+  [Label Something | Rest] Variables -> (<-> "    " (generate-faust-function-signature Label Variables)
+                                             "  " (generate-faust-code-1 Something) ";" (newline)
+                                             (newline)))
+
+(define generate-return-function
+  [Funcname Something | Rest] Variables AC -> (<-> (generate-faust-function-signature Funcname Variables)
+                                                   "  " (generate-faust-code-1 Something) " with{" (newline)
+                                                   "  " AC (newline)
+                                                   "};" (newline)))
+
+(define generate-faust-code
+  []                       Variables        Ret ReturnRet AC K -> (K Ret ReturnRet)
+  [return Funcname Something | Rest] Variables Ret ReturnRet AC K -> (generate-faust-code
+                                                                      Rest Variables
+                                                                      Ret
+                                                                      (<-> ReturnRet (generate-return-function [Funcname Something | Rest] Variables AC)) AC
+                                                                      K)
+  [Label Something | Rest] Variables        Ret ReturnRet AC K -> (generate-faust-code
+                                                                   Rest Variables
+                                                                   (<-> Ret (generate-faust-code-call-1 [Label Something | Rest] Variables))
+                                                                   ReturnRet AC
+                                                                   K)
+  )
+
+\
+(get-variables (parse))
+(track generate-faust-code-1)
+(generate-faust-code (parse))
+
+(load "/home/kjetil/faudiostream/compiler/parser/temp/test8_lexed.qi")
+(parse)
+(get-process (parse))
+
+(transform-returns 
+ (transform-strip-unused-functions 
+  (transform-imperative (get-process (parse))
+             (get-variables (parse))
+             (get-new-Fname)
+             false))
+ (get-variables (parse)))
+
+(generate-faust-code (transform-imperative (get-process (value *program*))
+                                           (get-variables (value *program*))
+                                           (get-new-Fname)
+                                           false)
+                     (get-variables (value *program*)))
+(transform-imperative (get-process (value *program*))
+                      (get-variables (value *program*))
+           (get-new-Fname)
+           false)
+\
+
+(define generate-method-faust-code Class-name Array-constants [method Name Code]
+  -> (let Vars (get-class-variables Class-name "")
+          Arglist (get-class-arg-list Class-name)
+          Firstfunc (head Code)
+          (generate-faust-code Code Vars "" "" Array-constants
+                               (/. MethodCode MethodReturnCode
+                                   (<-> (get-method-func-name Class-name Name) Arglist " = " (newline)
+                                        "  " (head Code) Arglist " with{" (newline)
+                                        MethodCode
+                                        Array-constants
+                                        "  };" (newline)
+                                        MethodReturnCode (newline))))))
+
+\
+(track generate-method-faust-code)
+(track generate-faust-code)
+\
+
+\
+  generate-quick-class-faust-startup-func
+  =======================================
+
+  A quick faust startup-func for a class is one which can be converted to
+  something which is almost clean faust code. The most important requirement
+  for this form is that there is no recursive variables.
+
+  Currently, fewer classes are converted to quick-faust than necessary,
+  since the conversion routine is not very sophisticated.
+\
+
+\
+* Setting the value of a non-local variable        -> false
+* Setting the value of any variable more than once -> false
+* Setting the value of a method argument           -> false
+\
+(define generate-quick-faust-startup-func-check-process-method
+  []                                          _      _      -> true
+  [[Type  Var]                        | Rest] Locals Setted -> (generate-quick-faust-startup-func-check-process-method Rest [Var|Locals] Setted)
+  where (element? Type [int float unknown])
+  [[set! Var _                      ] | Rest] Locals Setted -> (if (or (element? Var Setted)
+                                                                       (not (element? Var Locals)))
+                                                                   false
+                                                                   (generate-quick-faust-startup-func-check-process-method Rest Locals [Var | Setted]))
+  [[multi-set! []        _          ] | Rest] Locals Setted -> (generate-quick-faust-startup-func-check-process-method Rest Locals Setted)
+  [[multi-set! [Var|Vars] _         ] | Rest] Locals Setted -> (generate-quick-faust-startup-func-check-process-method (append [[set! Var 0]
+                                                                                                                                [multi-set! Vars 0]]
+                                                                                                                               Rest)
+                                                                                                                       Locals
+                                                                                                                       Setted)
+  [[function-name-hint _            ] | Rest] Locals Setted -> (generate-quick-faust-startup-func-check-process-method Rest Locals Setted)
+  [[return _                        ] | Rest] Locals Setted -> (generate-quick-faust-startup-func-check-process-method Rest Locals Setted)
+  [[object-call-get _ this _       _] | Rest] Locals Setted -> false
+  [[object-call-get _ _    process _] | Rest] Locals Setted -> (generate-quick-faust-startup-func-check-process-method Rest Locals Setted)
+  _                                           _      _      -> false)
+
+(define generate-quick-faust-startup-func-0? 
+  []                                    Setted Contains-process -> Contains-process
+  [[method process Args | Code] | Rest] Setted Contains-process -> (and (generate-quick-faust-startup-func-check-process-method  Code [] [])
+                                                                        (generate-quick-faust-startup-func-0? Rest Setted true))
+  [[method _       _    | _]    | Rest] Setted Contains-process -> (generate-quick-faust-startup-func-0? Rest Setted Contains-process)
+  [[object-call _ ___init _]    | Rest] Setted Contains-process -> (generate-quick-faust-startup-func-0? Rest Setted Contains-process)
+  [[Type _]                     | Rest] Setted Contains-process -> (generate-quick-faust-startup-func-0? Rest Setted Contains-process) where (is-class? Type)
+  [[int  _]                     | Rest] Setted Contains-process -> (generate-quick-faust-startup-func-0? Rest Setted Contains-process)
+  [[float  _]                   | Rest] Setted Contains-process -> (generate-quick-faust-startup-func-0? Rest Setted Contains-process)
+  [[unknown  _]                 | Rest] Setted Contains-process -> (generate-quick-faust-startup-func-0? Rest Setted Contains-process)
+  [[set! Var _                ] | Rest] Setted Contains-process -> (if (element? Var Setted)
+                                                                       false
+                                                                       (generate-quick-faust-startup-func-0? Rest [Var | Setted] Contains-process))
+  [[multi-set! []        _    ] | Rest] Setted Contains-process -> (generate-quick-faust-startup-func-0? Rest Setted Contains-process)
+  [[multi-set! [Var|Vars] _   ] | Rest] Setted Contains-process -> (if (element? Var Setted)
+                                                                       false
+                                                                       (generate-quick-faust-startup-func-0? [[multi-set! Vars 0] | Rest]
+                                                                                                             [Var | Setted]
+                                                                                                             Contains-process))
+  _                                     _      _                -> false)
+
+(define generate-quick-faust-startup-func? 
+  Parsed -> (generate-quick-faust-startup-func-0? Parsed [] false))
+  
+\
+(untrack generate-quick-faust-startup-func-0?)
+(track generate-quick-faust-startup-func-check-process-method)
+(generate-quick-faust-startup-func? [[float fb1] [float fb2] [float damp] [int spread]
+                                     [c___MonoReverb rev0]
+                                     [set! a 90]
+                                     [set! c 3]
+                                     [object-call rev0 ___init
+                                                  ["(" "" "fb1" " " "," " " "fb2" " " "," " " "damp" " "
+                                                   "," " " "0" " " ")"]]
+                                     [c___MonoReverb rev1]
+                                     [object-call rev1 ___init
+                                                  ["(" "" "fb1" " " "," " " "fb2" " " "," " " "damp" " "
+                                                   "," " " "spread" " " ")"]]
+                                     [method process [[unknown input1_42] [unknown input2_43]]
+                                            [int b][float f]
+                                            [multi-set! [b f] 2]
+                                             [object-call-get rev0_callget_res1649 rev0 process
+                                                              [[["" input1_42 " "] "+" " "] input2_43 " "]]
+                                             [object-call-get rev1_callget_res1650 rev1 process
+                                                              [[["" input1_42 " "] "+" " "] input2_43 " "]]
+                                             [return
+                                              ["(" "" rev0_callget_res1649 " " "," " "
+                                               rev1_callget_res1650 " " ")"]]]
+                                     [set! e 6]
+                                     ])
+
+\
+
+
+(define gen-quick-multiset
+  []         Value Name _ _   -> (<-> "  " Name " = " Value ";" (newline))
+  [Var|Vars] Value Name N Len -> (<-> "  " Var  " = " Name " : " (generate-signal-selector N Len) ";" (newline)
+                                      (gen-quick-multiset Vars Value Name (+ N 1) Len)))
+
+(define gen-quick-process
+  [[int  _]                               | Rest] K Res -> (gen-quick-process Rest K Res)
+  [[float  _]                             | Rest] K Res -> (gen-quick-process Rest K Res)
+  [[unknown  _]                           | Rest] K Res -> (gen-quick-process Rest K Res)
+  [[set! Var Value]                       | Rest] K Res -> (gen-quick-process Rest K
+                                                                              (<-> Res
+                                                                                   "  " Var " = " Value ";" (newline)))
+  [[multi-set! Vars Value]                | Rest] K Res -> (gen-quick-process Rest K
+                                                                              (<-> Res
+                                                                                   (gen-quick-multiset Vars Value (gensym "multiset___") 0 (length Vars))))
+  [[function-name-hint _            ]     | Rest] K Res -> (gen-quick-process Rest K Res)
+  [[return Val                      ]     | Rest] K Res -> (K Val Res)
+  [[object-call-get Var Ob  process Args] | Rest] K Res -> (gen-quick-process Rest K
+                                                                              (<-> Res
+                                                                                   "  " Var " = " Ob "(" Args ");" (newline)))
+  _                                               _ _   -> (parse-error "Something is very wrong. Error at gen-quick-process"))
+
+(define gen-quick-class
+  [[method process Args | Code]  | Rest] Vars K Res -> (gen-quick-process Code K Res)                                                                    
+  [[method _       _    | _]     | Rest] Vars K Res -> (gen-quick-class Rest Vars K Res)
+  [[object-call Ob ___init Args] | Rest] Vars K Res -> (gen-quick-class Rest Vars K
+                                                                        (<-> Res
+                                                                             "  " Ob " = " (get-type Ob Vars) Args ";" (newline)))
+  [[set! Var Value]              | Rest] Vars K Res -> (gen-quick-class Rest Vars K
+                                                                        (<-> Ret
+                                                                             "  " Var " = " Value ";" (newline)))
+  [[multi-set! MVars Value]      | Rest] Vars K Res -> (gen-quick-class Rest Vars K
+                                                                        (<-> Res
+                                                                             (gen-quick-multiset MVars Value (gensym "multiset___") 0 (length MVars))))
+  [[Type Var]                    | Rest] Vars K Res -> (gen-quick-class Rest [[Var Type]|Vars] K Res) where (is-class? Type)
+  [[int  _]                      | Rest] Vars K Res -> (gen-quick-class Rest Vars K Res)
+  [[float  _]                    | Rest] Vars K Res -> (gen-quick-class Rest Vars K Res)
+  [[unknown  _]                  | Rest] Vars K Res -> (gen-quick-class Rest Vars K Res)
+  [A                             | Rest] Vars K Res -> (parse-error (list "Something is very wrong. Error at gen-quick-class. " A)))
+
+
+(define generate-quick-class-faust-startup-func Class-name Parsed -> 
+  (let Constructor-args (map head (get-method-args (get-method-func-name Class-name Class-name)))
+       Process-args     (map head (get-method-args (get-method-func-name Class-name process)))
+       Args             (append (map head (get-class-arguments Class-name)) Constructor-args Process-args)
+       Line1            (<-> Class-name (generate-arg-list Args) " = ")
+       (gen-quick-class Parsed [] 
+                        (/. Retval Assignments
+                            (<-> Line1
+                                 (if (= "" Assignments)
+                                     (<-> Retval ";")
+                                     (<-> Retval " with{" (newline)
+                                          Assignments
+                                          "};"))
+                                 (newline)
+                                 (newline)))
+                        "")))
+                  
+\
+(track gen-quick-class)
+(track gen-quick-process)
+(track generate-quick-class-faust-startup-func)
+(untrack <->-macro)
+(generate-quick-class-faust-startup-func c___StereoReverb [[float fb1] [float fb2] [float damp] [int spread]
+                                                           [c___MonoReverb rev0]
+                                                           [set! a 100]
+                                                           [object-call rev0 ___init
+                                                                        ["(" "" "fb1" " " "," " " "fb2" " " "," " " "damp" " "
+                                                                         "," " " "0" " " ")"]]
+                                                           [c___MonoReverb rev1]
+                                                           [object-call rev1 ___init
+                                                                        ["(" "" "fb1" " " "," " " "fb2" " " "," " " "damp" " "
+                                                                         "," " " "spread" " " ")"]]
+                                                           [method process [[unknown input1_42] [unknown input2_43]]
+                                                                   [set! b 100]
+                                                                   [multi-set! [b d e] "hepp()"]
+                                                                   [object-call-get rev0_callget_res1649 rev0 process
+                                                                                    [[["" input1_42 " "] "+" " "] input2_43 " "]]
+                                                                   [object-call-get rev1_callget_res1650 rev1 process
+                                                                                    [[["" input1_42 " "] "+" " "] input2_43 " "]]
+                                                                   [return
+                                                                    ["(" "" rev0_callget_res1649 " " "," " "
+                                                                     rev1_callget_res1650 " " ")"]]]])
+->
+c___StereoReverb(fb1,fb2,damp,spread,input1_42,input2_43) =
+  (rev0_callget_res1649 , rev1_callget_res1650 )
+  with{
+    rev1_callget_res1650=rev1(input1_42+input2_43);
+    rev0_callget_res1649=rev1(input1_42+input2_43);
+    rev1=c___MonoReverb(fb1,fb2,damp,spread);
+    rev0=c___Monoreverb(fb1,fb2,damp,0);
+  };
+\
+
+(define get-notused-args-0
+  Class-args -> (<-> "notused__" (length Class-args)))
+
+(define get-notused-args
+  _    _      []             -> []
+  Args false  [A|Class-args] -> [(get-notused-args-0 Class-args) | (get-notused-args Args false Class-args)] where (element? A Args)
+  Args [R|Rs] [A|Class-args] -> [R                               | (get-notused-args Args Rs    Class-args)] where (element? A Args)
+  Args R      [A|Class-args] -> [A                               | (get-notused-args Args (if (cons? R) (tail R) false) Class-args)]
+  )
+
+\
+(get-notused-args [c a] false           [first a b c d e f])
+(get-notused-args [a c] [1 2 3 4 5 6 7] [first a b c d e f])
+(track get-notused-args)
+\
+
+
+
+\
+generate-regular-class-faust-startup-func
+=========================================
+
+* The faust entry function of this class:
+
+class Filter(float a){
+   float c;
+   Filter(b){...}
+   process(input){...}
+};
+
+* looks (something close to) this:
+
+1. Filter(a,b,input) = (function2 ~ (_,_,_,_,_)) : (_,_,_,_,!) : Filter__process__return with{
+2.   function2(notused1,notused2,c,notused3,notfirst) = (if(notfirst,
+3.                                                          Filter__process(a,b,c,input),
+4.                                                          function_init(a,b,c,input)
+5.                                                       )),1;
+6.   function_init(a,b,c,input) = Filter__process(newresult:(_,!,!,!),newresult:(!,_,!,!),newresult:(!,!,_,!),newresult:(!,!,_,!)) with{
+7.      newresult  = Filter__Filter(initresult:(_,!,!,!),initresult:(!,_,!,!),initresult:(!,!,_,!),initresult:(!,!,_,!));
+8.      initresult = Filter____init(a,b,c,input);
+9.   };
+   };
+
+
+* More accurately, the faust entry function for a class, for instance this one:
+
+class FxCtrl(Fx){
+    process(float left){
+        return Fx(0.52*left);
+    }
+}
+
+Is converted to either V1 or V2.
+V1 and V2 are defined below:
+
+V1:
+c___FxCtrl(c___Fx, left_1) = (function__1305 ~ (_,_,_)) : (_, _, !) : process_return_convert1304 with{
+    function__1305(notused__1, notused__0, notfirst) = (if__(notfirst,
+          function_process__1307(c___Fx, left_1, 0),
+          function_init__1306(c___Fx, left_1, 0)
+    )),1;
+
+  function_init__1306(c___Fx, left_1, retsel__) = process_convert1303(c___FxCtrl_____init(c___Fx, left_1, retsel__));
+
+  function_process__1307(c___Fx, left_1, retsel__) = process_convert1303(c___FxCtrl_____initrepeat(c___Fx, left_1, retsel__));
+
+  process_convert1303((left_1, retsel__)) = c___FxCtrl__process(c___Fx, left_1, retsel__);
+  process_return_convert1304(left_1, retsel__) = c___FxCtrl__process__return__(c___Fx, left_1, retsel__);
+};
+
+
+And in case c___FxCtrl_____init and c___FxCtrl_____initrepeat are equal (which they are in this example):
+
+V2:
+c___FxCtrl(c___Fx, left_1) = (function__1305 ~ (_,_)) : process_return_convert1304 with{
+  function__1305(notused__1, notused__0) = c___FxCtrl_____initrepeat(c___Fx, left_1, 0) : process_convert1303;
+
+  process_convert1303(left_1, retsel__) = c___FxCtrl__process(c___Fx, left_1, retsel__);
+  process_return_convert1304(left_1, retsel__) = c___FxCtrl__process__return__(c___Fx, left_1, retsel__);
+};
+
+
+* In the functiohn 'generate-regular-class-faust-startup-func', the variables B, C and D looks like this
+  for the FxCtrl class above:
+
+B(V1) = : (_,_,!)
+B(V2) = ""
+C(V1) = (if__(notfirst,function_process__1307(c___Fx, left_1, 0),function_init__1306(c___Fx, left_1, 0))),1;
+C(V2) = c___FxCtrl_____initrepeat(c___Fx, left_1, 0) : process_convert1303; // MUCH faster than process_convert1303(c___FxCtrl_____initrepeat(...)) !!
+D(V1) = process_convert1303(function_init__1306(c___Fx, left_1, retsel__) = c___FxCtrl_____init(c___Fx, left_1, retsel__));
+        process_convert1303(function_process__1307(c___Fx, left_1, retsel__) = c___FxCtrl_____initrepeat(c___Fx, left_1, retsel__));
+D(V2) = ""
+
+
+
+\
+(define generate-line3/4-args
+  Class-name Known-args []            -> []
+  Class-name Known-args [Name | Rest] -> (let Element (if (element? Name Known-args)
+                                                          Name
+                                                          (nth 2 (assoc (get-variable-type Class-name Name) [[float 0.0][int 0][unknown 0.0]])))
+                                              [Element | (generate-line3/4-args Class-name Known-args Rest)]))
+\
+(track generate-line3/4-args)
+(track get-method-args)
+(untrack generate-arg-list)
+(parse)
+(track get-variable-type)
+(get-class-global-variables c___MonoReverb)
+(get-flattened-class-varnames c___MonoReverb "")
+(map head (get-method-args (get-method-func-name c___MonoReverb process)))
+\
+(define generate-regular-class-faust-startup-func Class-name
+  -> (let Init-required    (is-init___-required? Class-name)
+          Constructor-args (map head (get-method-args (get-method-func-name Class-name Class-name)))
+          Process-args     (map head (get-method-args (get-method-func-name Class-name process)))
+          Args             (append (map head (get-class-arguments Class-name)) Constructor-args Process-args)
+          Class-args       (get-flattened-class-varnames Class-name "")
+          Class-args-nf    (set-subtract Class-args (get-class-functypes Class-name)) \ Class-args except those those are functions. \
+          Class-args-nonfuncs-length (length Class-args-nf)
+          Init-name        (get-method-func-name Class-name ___init)
+          Initrep-name     (get-method-func-name Class-name ___initrepeat)
+          Constructor-name (get-method-func-name Class-name Class-name)
+          Process-name     (get-method-func-name Class-name process)
+          Process-ret-name (get-method-func-name Class-name process__return__)
+          Process-convert-name      (gensym "process_convert")
+          Process-ret-convert-name  (gensym "process_return_convert")
+          Notfirst                  (gensym "notfirst__")
+          Function2                 (gensym "function__")
+          Function2-args   (append (get-notused-args (set-subtract Class-args-nf
+                                                                   (set-subtract (flatten-varnames (get-class-global-variables Class-name))
+                                                                                 Process-args))
+                                                     false
+                                                     Class-args-nf)
+                                   (if Init-required
+                                       [Notfirst]
+                                       []))
+          Function-init    (gensym "function_init__")
+          Function-process (gensym "function_process__")
+          B                (if Init-required \ See comment above for what 'B', 'C' and 'D' contains. \
+                               (<-> ": " (generate-arg-list (append (make-list Class-args-nonfuncs-length "_") ["!"]))) \ cut off the 'Notfirst' signal \
+                               "")
+          Line1            (<-> Class-name (generate-arg-list Args)
+                                " = (" Function2 " ~ " (generate-identity-func (if Init-required
+                                                                                   (+ Class-args-nonfuncs-length 1)
+                                                                                   Class-args-nonfuncs-length))
+                                "   ) " B " : " Process-ret-convert-name " with{" (newline))
+
+          Line3/4-args     (generate-line3/4-args Class-name (append Args Function2-args) Class-args)
+          C                (if Init-required
+                               (<-> "(if__(" Notfirst "," (newline)
+                                    "          " Function-process (generate-arg-list Line3/4-args) "," (newline)
+                                    "          " Function-init (generate-arg-list Line3/4-args)  (newline)
+                                    "    )),1;")
+                               (<-> Initrep-name (generate-arg-list Line3/4-args) " : " Process-convert-name ";"))
+          
+          Line2            (<-> "    " Function2 (generate-arg-list Function2-args) " = " C (newline))
+          
+          D                (if Init-required
+                               (<-> "  " Function-init (generate-arg-list Class-args)
+                                    " = " Process-convert-name "(" Init-name (generate-arg-list Class-args) ");" (newline)
+                                    "  " Function-process (generate-arg-list Class-args)
+                                    " = " Process-convert-name "(" Initrep-name (generate-arg-list Class-args) ");" (newline))
+                               "")
+
+          Line8            D
+
+          Line12 (if Init-required \ Two different versions used here since the second one (which can't be used by Init) is much faster in faust. \
+                     (<-> "  " Process-convert-name "(" (generate-arg-list Class-args-nf) ") = " Process-name (generate-arg-list Class-args) ";"(newline))
+                     (<-> "  " Process-convert-name (generate-arg-list Class-args-nf) " = " Process-name (generate-arg-list Class-args) ";"(newline)))
+          Line13 (<-> "  " Process-ret-convert-name (generate-arg-list Class-args-nf)  " = " Process-ret-name (generate-arg-list Class-args) ";"(newline))
+
+          Line14 (<-> "};" (newline))
+
+          (<-> Line1 Line2 Line8 Line12 Line13 Line14)))
+
+\
+(untrack generate-class-faust-startup-func)
+(untrack generate-class-faust-code)
+(parse)
+(generate-class-faust-startup-func bank)
+(get-class-arg-list bank)
+(untrack <->-macro)
+(get-hash (value *class-defs*) Method-name)
+\
+
+(define generate-class-faust-startup-func
+  Class-name Parsed -> (if (generate-quick-faust-startup-func? Parsed)
+                           (generate-quick-class-faust-startup-func Class-name Parsed)
+                           (generate-regular-class-faust-startup-func Class-name)))
+
+(define generate-class-faust-code Class-name Parsed ->
+  (let Array-constants (generate-array-constants Parsed)
+       Code            (transform-class Class-name Parsed)
+       Process-name    (get-method-func-name Class-name process)                                
+       (append (map (/. Method \ For some reason, partial application didn't work with generate-method-faust-code! \
+                        (generate-method-faust-code Class-name Array-constants Method))
+                    Code)
+               (if (method-exists? Process-name)
+                   [(generate-class-faust-startup-func Class-name Parsed)]
+                   []))))
+\
+(untrack transform-class)
+(track method-exists?)
+(track transform-class)
+(untrack generate-method-faust-code)
+(parse)
+(generate-class-faust-code bank (value *class-bank*))
+(generate-class-faust-code sb (value *class-sb*))
+(transform-class bank (value *class-bank*))
+(track transform-class-method-0)
+(track generate-faust-code-1)
+(track generate-faust-code-0)
+(track generate-method-faust-code)
+(track generate-class-faust-code)
+(untrack get-method-func-name)
+(track generate-method-faust-code)
+(track generate-class-faust-startup-func)
+(parse)
+(transform-class bank (value *class-bank*))
+((generate-method-faust-code bank) [method put 1 2 3])
+(untrack <->-macro)
+\
+
+(define parse-error
+  Msg -> (error (<-> "Line " (curr-linenum) ": " Msg ".")))
+\
+(do  (print (eat-tokens 0)) 
+          (error (<-> "Line " (curr-linenum) ": " Msg ". " (eat-tokens 0))))
+\
+
+(define parse-faust-defs
+  []         End _ _ _ -> (parse-error (<-> "Expected '" End "'."))
+  [End   |_] End R M K -> (do (eat-tokens 1) (K R M))
+  [A "=" |_] End R M K -> (parse-fe (eat-tokens 2) ";"
+                                    (/. Value M2
+                                        (parse-faust-defs (eat-tokens 0) End (list R A "=" Value ";") 
+                                                          (append M M2)
+                                                          K)))
+  [A "(" |_] End R M K -> (let Args (map (nth 2) (parse-method-args (eat-tokens 2)))
+                               (parse-fe (eat-specific-token "=") ";"
+                                         (/. Value M2
+                                             (parse-faust-defs (eat-tokens 0) End (list R A (generate-arg-list Args) "=" Value ";") 
+                                                               (append M M2)
+                                                               K))))
+  [A     |_] End _ _ _ -> (parse-error (<-> "Syntax error." A)))
+  
+(define make-buffer-access
+  Name Index -> (list "rwtable(" Name "__size, " Name "__init, " Name "__pos, " Name "__val, (" Index "))"))
+
+(define parse-multi-set-vars-0
+  [Name "=" | _] K R -> (do (eat-tokens 2)
+                          (K (append R [Name])))
+  where (are-names? [Name])
+  [Name "," | _] K R -> (parse-multi-set-vars-0 (eat-tokens 2) K (append R [Name]))
+  A              _ _ -> (parse-error (<-> "Syntax error while parsing multiple value set. " A)))
+
+(define parse-multi-set-vars
+  K -> (parse-multi-set-vars-0 (eat-tokens 0) K []))
+
+\ Handled here:
+  * Buffer access (Name[Index]).
+  * etc.
+
+  R = The parsed faust expression. (a list of strings)
+  M = Added statements which must be executed before the faust expressions. 
+      (For instance if a faust expression contains method calls, or ++var/--var..)
+  K = The kontinuation.
+\
+(define parse-fe-1
+  []                    End _ _ -> (parse-error (<-> "Missing '" End "'"))
+  [End              |_] End R M -> (do (eat-tokens 1)
+                                       [R M])
+  [")"              |_] End _ _ -> (parse-error "Unexpected right parenthesis")
+  ["("              |_] End R M -> (parse-fe-0 (eat-tokens 1) ")" "" M
+                                               (/. R2 M
+                                                   (parse-fe-1 (eat-tokens 0) End (list R "(" R2 ")") M)))
+  [Name "("         |_] End R M -> (parse-fe-0 (eat-tokens 2) ")" "" M
+                                               (/. R2 M
+                                                   (parse-fe-1 (eat-tokens 0) End
+                                                               (list R Name "(" R2 ")")
+                                                               (append M [[function-name-hint (<_> Name)]])
+                                                               )))
+  where (is-function-name? Name)
+  [Ob "." Name "("  |_] End R M -> (let Var (gensym (<-> Ob "_callget_res"))
+                                        (parse-fe-0 (eat-tokens 4) ")" "" []
+                                                    (/. R2 M2
+                                                        (parse-fe-1 (eat-tokens 0) End 
+                                                                    (list R Var " ")
+                                                                    (append M
+                                                                            M2 
+                                                                            [[object-call-get Var (<_> Ob) (<_> Name) R2]]
+                                                                            )
+                                                                    ))))
+  where (are-names? [Ob Name])
+  [Ob "." Name      |_] End R M -> (let Var (gensym (<-> Ob "_get_res"))
+                                        (parse-fe-1 (eat-tokens 3) End
+                                                    (list R Var " ")
+                                                    (append M [[object-get Var (<_> Ob) (<_> Name)]])
+                                                    ))
+  where (are-names? [Ob Name])
+  [Ob "[" N "]" "." |_] End R M -> (do (eat-tokens 4)
+                                           (push-token (<-> Ob N))
+                                           (parse-fe-1 (eat-tokens 0) End R M))
+  where (are-names? [Ob])
+  [Name "["         |_] End R M -> (parse-fe-0 (eat-tokens 2) "]" "" M
+                                                   (/. R2 M
+                                                       (parse-fe-1 (eat-tokens 0) End 
+                                                                   (list R (make-buffer-access Name R2))
+                                                                   M)))
+  where (are-names? [Name])
+  [Defkey "{"       |_] End R M -> (parse-faust-defs (eat-tokens 2) "}" [] M
+                                                     (/. Defs M
+                                                         (parse-fe-1 (eat-tokens 0) End
+                                                                     (list R " " Defkey "{" Defs "}")
+                                                                     M))) 
+  where (element? Defkey ["definition" "with"])
+  [string Something |_] End R M -> (parse-fe-1 (eat-tokens 1) End (list R (write-string-string Something)) M)
+  [Name "+" "+"     |_] End R M -> (parse-error "Postfix ++ not allowed in faust expression.") where (are-names? [Name])
+  [Name "-" "-"     |_] End R M -> (parse-error "Postfix -- not allowed in faust expression.") where (are-names? [Name])
+  
+  ["+" "+" Name     |_] End R M -> (parse-fe-1 (eat-tokens 3) End
+                                               (list R Name " ")
+                                               (append M [[set! (<_> Name) (list Name "+1")]])
+                                               )   where (are-names? [Name])
+  ["-" "-" Name     |_] End R M -> (parse-fe-1 (eat-tokens 3) End
+                                               (list R Name " ")
+                                               (append M [[set! (<_> Name) (list Name "-1")]])
+                                               )  where (are-names? [Name])
+  ["0" A            |_] End R M -> (parse-fe-1 (eat-tokens 2) End (list R " " (hex-string-to-dec (<-> "o" A)) " ") M) where (hex-string? (<-> "o" A))
+  [A        | _] End        R M -> (parse-fe-1 (eat-tokens 1) End (list R A " ") M))
+
+
+(define parse-fe-0
+  Code End R M K -> (let Ret (parse-fe-1 Code End R M)
+                         (K (nth 1 Ret) (nth 2 Ret))))
+
+\ fe = faust expression !! \
+(define parse-fe
+  Code End K -> (parse-fe-0 Code End "" []
+                            (/. R M
+                                (K (flatten ["(" R ")"]) M))))
+
+(define parse-variables-0
+  [Name ";" | _] Type K R -> (do (eat-tokens 1)
+                                 (K (append R [[Type (<_> Name)]])))
+  where (are-names? [Name])
+  [Name "=" | _] Type K R -> (do (eat-tokens 1)
+                                 (K (append R [[Type (<_> Name)]])))
+  where (are-names? [Name])
+  [Name "," | _] Type K R -> (parse-variables-0 (eat-tokens 2) Type K (append R [[Type (<_> Name)]]))
+  where (are-names? [Name])
+  A              _    _ _ -> (parse-error (<-> "Syntax error while parsing multiple value set. " A)))
+
+(define parse-variables
+  Code Type K -> (parse-variables-0 Code Type K []))
+
+(define check-next-is
+  Token -> (if (not (= Token (head (eat-tokens 0))))
+               (parse-error (<-> "Expected '" Token "', but found '" (head (eat-tokens 0)) "'"))
+               true))
+
+
+(define parse-code
+  []                     K -> (parse-error "Expected }")
+  ["}"              | _] K -> (do (eat-tokens 1) [])
+  [Type Name        | _] K -> (parse-variables (eat-tokens 1) (<_> Type)
+                                             (/. Vars
+                                                 (if (next-token-is ";")
+                                                     (append Vars (K (eat-tokens 1)))
+                                                     (parse-fe (eat-specific-token "=") ";"
+                                                               (/. Value Ma
+                                                                   (append Ma 
+                                                                           Vars
+                                                                           [[multi-set! (map (nth 2) Vars) Value]]
+                                                                           (K (eat-tokens 0))))))))
+  where (and (element? Type ["float" "int"])
+             (are-names? [Name]))
+  [Name "[" Pos "]" "=" "new" Class "(" | _] K -> (parse-fe (eat-tokens 8) ")"
+                                                          (/. Args Ma
+                                                              (do (eat-specific-token ";")
+                                                                  (append Ma
+                                                                          [[object-call (<_> (<-> Name Pos)) Class Args]]
+                                                                          (K (eat-tokens 0))))))
+  where (are-names? [Name Class])
+  [Name "=" "new" Class "("|_] K -> (parse-fe (eat-tokens 5) ")"
+                                            (/. Args Ma
+                                                (do (eat-specific-token ";")
+                                                    (append Ma
+                                                            [[object-call (<_> Name) Class Args]]
+                                                            (K (eat-tokens 0))))))
+  where (are-names? [Name Class])
+  ["if"    "("      | _] K -> (parse-fe (eat-tokens 2) ")"
+                                      (/. Test Ma
+                                          (let Rest (K (eat-tokens 0))
+                                               (append Ma
+                                                       (if (and (> (length Rest) 2)
+                                                                (= else (nth 2 Rest)))
+                                                           [[if Test
+                                                                (nth 1 Rest)
+                                                                (nth 3 Rest)]
+                                                            | (nth-cdr 4 Rest)]
+                                                           [[if Test
+                                                                (nth 1 Rest)]
+                                                            | (nth-cdr 2 Rest)])))))
+  ["{"              | _] K -> (let Inside (parse-code (eat-tokens 1) K)
+                                   [[begin | Inside]
+                                    | (K (eat-tokens 0))])
+  [Name "="         | _] K -> (parse-fe (eat-tokens 2) ";"
+                                      (/. Value Ma
+                                          (append Ma
+                                                  [[set! (<_> Name) Value]]
+                                                  (K (eat-tokens 0)))))
+  where (are-names? [Name])
+  [Name ","         | _] K -> (parse-multi-set-vars (/. Vars-to-be-set
+                                                      (parse-fe (eat-tokens 0) ";"
+                                                                (/. Value Ma
+                                                                    (append Ma
+                                                                            [[multi-set! Vars-to-be-set Value]]
+                                                                            (K (eat-tokens 0)))))))
+  where (are-names? [Name])
+  [Name Op "="      | _] K -> (parse-fe (eat-tokens 3) ";"
+                                      (/. Value Ma
+                                          (append Ma
+                                                  [[set! (<_> Name) (flatten [Name " " Op " (" Value ")"])]]
+                                                  (K (eat-tokens 0)))))
+  where (and (element? (<_> Op) [+ - * /])
+             (are-names? [Name]))
+  [Name "+" "+" ";" | _] K -> [[set! (<_> Name) (list Name "+1")]
+                               | (K (eat-tokens 4))] where (are-names? [Name])
+  [Name "-" "-" ";" | _] K -> [[set! (<_> Name) (list Name "-1")]
+                               | (K (eat-tokens 4))] where (are-names? [Name])
+  ["+" "+" Name ";" | _] K -> [[set! (<_> Name) (list Name "+1")]
+                               | (K (eat-tokens 4))] where (are-names? [Name])
+  ["-" "-" Name ";" | _] K -> [[set! (<_> Name) (list Name "-1")]
+                               | (K (eat-tokens 4))] where (are-names? [Name])
+  [Name "["         | _] K -> (parse-fe (eat-tokens 2) "]"
+                                      (/. Index Ma
+                                          (do (eat-specific-token "=")
+                                              (parse-fe (eat-tokens 0) ";"
+                                                        (/. Value Ma2
+                                                            (append Ma
+                                                                    Ma2
+                                                                    [[array-set! (<_> Name) Index Value]]
+                                                                    (K (eat-tokens 0))))))))
+  where (are-names? [Name])
+  ["else"           | _] K -> [else 
+                               | (parse-code (eat-tokens 1) K)] \ this is not good. This part should be moved to "if". \
+  ["return"         | _] K -> (parse-fe (eat-tokens 1) ";"
+                                        (/. Value Ma
+                                            (append Ma
+                                                    [[return Value]]
+                                                    (K (eat-tokens 0)))))
+  [Ob "." Name "("  | _] K -> (parse-fe (eat-tokens 4) ")"
+                                        (/. Args Ma
+                                            (do (eat-specific-token ";")
+                                                (append Ma
+                                                        [[object-call (<_> Ob) (<_> Name) Args]]
+                                                        (K (eat-tokens 0))))))
+  where (are-names? [Ob Name])
+  [Name "("         | _] K -> (parse-fe (eat-tokens 2) ")"
+                                      (/. Args Ma
+                                          (do (eat-specific-token ";")
+                                              (append Ma
+                                                      [[object-call this (<_> Name) Args]]
+                                                      (K (eat-tokens 0))))))
+  where (are-names? [Name])
+  [Ob "." Name "="  | _] K -> (parse-fe (eat-tokens 4) ";"
+                                      (/. Value Ma
+                                          (append Ma
+                                                  [[object-set! (<_> Ob) (<_> Name) Value]]
+                                                  (K (eat-tokens 0)))))
+  where (are-names? [Ob Name])
+  [Ob "." Name "+" "+" ";" | _] K -> (let Var (gensym (<-> Ob "_get_res"))
+                                          [[object-get Var (<_> Ob) (<_> Name)]
+                                           [object-set! (<_> Ob) (<_> Name) (list Var "+1")]
+                                           | (K (eat-tokens 6))])
+  where (are-names? [Ob Name])
+  [Ob "." Name "-" "-" ";" | _] K -> (let Var (gensym (<-> Ob "_get_res"))
+                                          [[object-get Var (<_> Ob) (<_> Name)]
+                                           [object-set! (<_> Ob) (<_> Name) (list Var "-1")]
+                                           | (K (eat-tokens 6))])
+  where (are-names? [Ob Name])
+  [A                | _] K -> (parse-error (<-> "Syntax error: '" A "'") )
+  )
+
+\
+(element? i [i2 value i buffer])
+(parse)
+(track parse)
+(track parse-code)
+(track parse-decl)
+(lexlist->tokens (value *lexlist*))
+(load "/home/kjetil/faudiostream/compiler/parser/temp/test8_lexed.qi")
+(track parse-0)
+(track parse-imperative)
+(track check-undefined)
+(track parse-code)
+(track parse-error)
+(track parse-method-body)
+(parse)
+(track parse-fe)
+(track parse-fe-0)
+(untrack <->-macro)
+(untrack lexlist->tokens)
+\
+
+(define parse-method-body
+  Code -> (parse-code Code parse-method-body))
+
+(define parse-method-args-0
+  [")"           |_] -> (do (eat-tokens 1)
+                            [])
+  [Name ")"      |_] -> (do (eat-tokens 2)
+                            [[unknown (<_> Name)]])
+  [Name ","      |_] -> [[unknown    (<_> Name)] | (parse-method-args-0 (eat-tokens 2))]
+  [Type Name "," |_] -> [[(<_> Type) (<_> Name)] | (parse-method-args-0 (eat-tokens 3))]
+  where (and (element? Type ["int" "float"]) 
+             (are-names? [Name]))
+  [Type Name ")" |_] -> (do (eat-tokens 3)
+                            [[(<_> Type) (<_> Name)]])
+  where (and (element? Type ["int" "float"])
+             (are-names? [Name]))
+  A                  -> (parse-error (<-> "Syntax error while parsing method arguments (" (if (cons? A) (head A) "[]") ")")))
+
+
+\ Note! Currently also used to parse faust function args from parse-faust-defs. \
+(define parse-method-args 
+  [             ")" |_] -> (do (eat-tokens 1) [])
+  Code                  -> (parse-method-args-0 Code))
+
+\
+Moved into transform to get the __init and __initrepeat methods as well.
+(define make-method-arg-type-setters
+  []                       -> []
+  [[float Varname] | Rest] -> [[set! Varname (list "float(" Varname ")")]
+                               | (make-method-arg-type-setters Rest)]
+  [[int   Varname] | Rest] -> [[set! Varname (list "int(" Varname ")")]
+                               | (make-method-arg-type-setters Rest)]
+  [A               | Rest] -> (make-method-arg-type-setters Rest))
+\
+
+(define parse-method
+  Name -> (let Args (parse-method-args (eat-tokens 1))
+               (do (eat-specific-token "{")
+                   (let Body (parse-method-body (eat-tokens 0))
+                        [[method (<_> Name) Args | (append [] \ (make-method-arg-type-setters Args) \
+                                                           Body)] 
+                         | (parse-class-0 (eat-tokens 0))]))))
+\
+(track parse-method)
+(track parse-method-args)
+(track parse-method-args-0)
+(parse)
+(untrack put-class-variables)
+\
+
+\
+parse-decl parses the contents of class{...}.
+\
+
+
+
+(define parse-class-0
+  ["}"             |_] -> (do (eat-tokens 1) [])
+
+\
+  [Type Name "[" Size "]"  |_] -> (let Rest  (eat-tokens 5)
+                                       Value (if (= (head Rest) "=")
+                                                 (parse-fe (eat-tokens 1) ";"
+                                                           (/. R M
+                                                               R))
+                                                 (do (eat-specific-token ";")
+                                                     (if (= Type "int")
+                                                         "0"
+                                                         "0.0")))
+                                       (append [[array (<_> Type) (<_> Name) Size Value]]
+                                               (parse-class-0 (eat-tokens 0))))
+  where (and (element? Type ["int" "float"])
+             (are-names? [Name])
+             (or (number? Size)
+                 (are-names? [Size])))
+
+  [Type Name "[" El  |_] -> (parse-error "Array size must be either a constant variable, or an integer")
+  where (element? Type ["int" "float"])
+\
+
+
+  [Type Name "["   |_] -> (parse-fe (eat-tokens 3) "]"
+                                    (/. Size Ma
+                                        (let Rest  (eat-tokens 0)
+                                             Value (if (= (head Rest) "=")
+                                                       (parse-fe (eat-tokens 1) ";"
+                                                                 (/. R M
+                                                                     R))
+                                                       (do (eat-specific-token ";")
+                                                           (if (= Type "int")
+                                                               "0"
+                                                               "0.0")))
+                                             [[array (<_> Type) (<_> Name) Size Value]
+                                              | (parse-class-0 (eat-tokens 0))])))
+  where (and (or (= Type "int") 
+                 (= Type "float"))
+             (are-names? [Name]))
+  
+  [Type Name "[" 0 "]"] -> (parse-class-0 (eat-tokens 6))
+  where (are-names? [Type Name])
+  [Type Name "[" N "]"] -> [[Type (<_> (<-> Name (- N 1)))]
+                            | (parse-class-0 [Type Name "[" (- N 1) "]"])]
+  where (and (number? N)
+             (are-names? [Type Name]))  
+  [Type Name "[" N "]" ";" |_] -> (if (or (not (number? (string->number N)))
+                                          (= (string->number N) 0))
+                                      (parse-error (<-> "Array size must be a number higher than 0. ('" N "')"))
+                                      (parse-class-0 [(<_> Type) (<_> Name) "[" (string->number N) "]"]))
+  where (are-names? [Type Name])
+  ["float" Name ";" |_] -> [[float (<_> Name)]
+                              | (parse-class-0 (eat-tokens 3))]
+  where (are-names? [Name])
+  ["int"   Name ";" |_] -> [[int (<_> Name)]
+                              | (parse-class-0 (eat-tokens 3))]
+  where (are-names? [Name])
+  [Class   Name ";" |_] -> [[(<_> Class) (<_> Name)]
+                            [object-call (<_> Name) ___init [""]]
+                            | (parse-class-0 (eat-tokens 3))]
+  where (are-names? [Class Name])
+  [Type Name "("    |_] -> (do (eat-tokens 2)
+                               (parse-method Name))
+  where (and (element? Type ["int" "float"])
+             (are-names? [Name]))
+  [Name      "("    |_] -> (do (eat-tokens 1)
+                               (parse-method Name))
+  where (are-names? [Name])
+
+  [Class   Name "("|_] -> (parse-fe (eat-tokens 3) ")"
+                                    (/. Args Ma
+                                        (do (eat-specific-token ";")
+                                            (append Ma
+                                                    [[Class (<_> Name)]]
+                                                    [[object-call (<_> Name) ___init Args]]
+                                                    (parse-class-0 (eat-tokens 0))))))
+  where (are-names? [Class Name])
+  [Class   Name "=" "new" Class "("|_] -> (parse-fe (eat-tokens 6) ")"
+                                                    (/. Args Ma
+                                                        (do (eat-specific-token ";")
+                                                            (append Ma
+                                                                    [[Class (<_> Name)]]
+                                                                    [[object-call (<_> Name) ___init [""]]]
+                                                                    [[object-call (<_> Name) Class Args]]
+                                                                    (parse-class-0 (eat-tokens 0))))))
+  where (are-names? [Class Name])
+  [Type    Name "=" |_] -> (parse-fe (eat-tokens 3) ";"
+                                     (/. Value Ma
+                                         [[(<_> Type) (<_> Name) Value] 
+                                          | (parse-class-0 (eat-tokens 0))]))
+  where (is-type?-are-names? Type [Name])
+  ["int"   Name     |_] -> (parse-error "Expected ;, [, or =")
+  where (are-names? [Name])
+  ["float" Name     |_] -> (parse-error "Expected ;, [, or =")
+  where (are-names? [Name])
+  A                     -> (parse-code A parse-class-0))  \ Constructor code, or error. \
+
+
+\
+(untrack parse-method-args)
+(track parse-method-body)
+(track uniqify-class)
+(track parse-class-0)
+(parse)
+(track uniqify-class)
+(untrack parse-0)
+\
+(define parse-class
+  Class-args Rest -> (uniqify-class (append Class-args
+                                            (parse-class-0 Rest))))
+
+(define parse-0
+  Rest                   Ln -> (<-> (newline) (parse-0 Rest (+ Ln 1))) where (< Ln (curr-linenum))
+  []                     Ln -> (newline)
+  [string String    | _] Ln -> (<-> (write-string-string String) " " (parse-0 (eat-tokens 1) Ln) " ")
+  [class___ Name Args|_] Ln -> (do (put-___init-arguments Name Args)
+                                   (let Parsed (parse-class Args (eat-specific-token "{"))
+                                        (do (put-___initrepeat-arguments Name Parsed)
+                                            (<-> (generate-class-faust-code (<_> Name) Parsed)
+                                                 (parse-0 (eat-tokens 0) (curr-linenum))))))
+  ["class" Name "{" | _] Ln -> (parse-0 [class___ Name [] | (eat-tokens 2)] Ln)
+  ["class" Name "(" | _] Ln -> (parse-0 [class___ Name (parse-method-args (eat-tokens 3))] Ln)
+  [A                | _] Ln -> (<-> A " " (parse-0 (eat-tokens 1) Ln) " "))
+
+(define parse
+  -> (do (init-tokens)
+         (<-> "if__(a,(k1,k2),(k3,k4)) = if__(a,k1,k3),if__(a,k2,k4);" (newline)
+              "if__(a,k,k)             = k;" (newline)
+              "if__(a,k1,k2)           = select2(a,k2,k1);" (newline)
+              (parse-0 (eat-tokens 0) 0))))
+
+\
+(track generate-class-faust-code)
+(track parse)
+(track parse-0)
+(parse)
+(track parse-class-0)
+(track parse-class)
+(track transform-class)
+(track transform-class-0)
+(track transform-class-method)
+(track transform-class-gen-init-method)
+(track put-class-variables)
+(track parse-0)
+(untrack parse-0)
+(track curr-linenum)
+(curr-linenum)
+(head (head (reverse (value *lexlist*))))
+(nth 2 (reverse (value *lexlist*)))
+(empty? (value *lexlist2*))
+(lexlist->tokens (value *lexlist*))
+(<-> "buffer")
+\
+
+
+
+(define init-tokens
+  -> (set *lexlist2* (value *lexlist*)))
+
+(define curr-linenum
+  -> (if (empty? (value *lexlist2*))
+         (nth 2 (reverse (value *lexlist*)))
+         (head (value *lexlist2*))))
+
+\
+(track push-token)
+(untrack eat-tokens-0)
+\
+(define push-token
+  Token -> (let Lexlist [(curr-linenum) Token | (value *lexlist2*)]
+                (do (add-lexlist-hash Lexlist [Token | (eat-tokens 0)])
+                    (set *lexlist2* Lexlist)
+                    (eat-tokens 0))))
+
+(define eat-tokens-0
+  0 Lex-code             -> (do (set *lexlist2* Lex-code)
+                                (lexlist->tokens Lex-code))
+  N [Ln string _ | Rest] -> (eat-tokens-0 (- N 1) Rest)
+  N [Ln _        | Rest] -> (eat-tokens-0 (- N 1) Rest))
+
+(define eat-tokens
+  N -> (eat-tokens-0 N (value *lexlist2*)))
+
+(define next-token-is
+  Token -> (= Token (head (eat-tokens 0))))
+
+(define eat-specific-token
+  Token -> (if (not (next-token-is Token))
+               (parse-error (<-> "Expected '" Token "', but found '" (head (eat-tokens 0)) "'"))
+               (eat-tokens 1)))
+
+(define lexcode->linenumber-0
+  Lex-code [Ln _              ] -> Ln
+  Lex-code [Ln | Rest         ] -> Ln where (= Lex-code (lexlist->tokens [Ln | Rest]))
+  Lex-code [Ln string _ | Rest] -> (lexcode->linenumber-0 Lex-code Rest)
+  Lex-code [Ln _        | Rest] -> (lexcode->linenumber-0 Lex-code Rest))
+
+(define lexcode->linenumber
+  Lex-code -> (lexcode->linenumber-0 Lex-code (value *lexlist*)))
+
+\
+(lexcode->linenumber (nth-cdr 60 (lexlist->tokens (value *lexlist*))))
+(value *lexlist*)
+(nth-cdr 120 (value *lexlist*))
+\
+
+(define add-lexlist-hash
+  Key Value -> (set-hash (value *lexlist-hash*) Key Value))
+
+(define init-lexlist-hash-0
+  [] -> (add-lexlist-hash [] [])
+  A  -> (add-lexlist-hash A [string (nth 3 A) | (init-lexlist-hash-0 (nth-cdr 4 A))])
+  where (= string (nth 2 A))
+  A  -> (add-lexlist-hash A [       (nth 2 A) | (init-lexlist-hash-0 (nth-cdr 3 A))]))
+
+(define init-lexlist-hash Lexlist ->
+  (do (set *lexlist-hash* (make-hash-table))
+      (init-lexlist-hash-0 Lexlist)))
+\
+(set *t* [2 3 4 5])
+(init-lexlist-hash (value *t*))
+(lexlist->tokens (value *t*))
+(track init-lexlist-hash-0)
+(set-hash (make-hash-table) [2 3] [53 43])
+\
+
+(define lexlist->tokens A ->
+  (get-hash (value *lexlist-hash*) A))
+\
+(lexlist->tokens (value *lexlist*))
+\
+
+(define read-lexed-file Filename ->
+  (WITH-OPEN-FILE
+   (In Filename :DIRECTION :INPUT)
+   (READ In)))
+
+(define das-main In-file Out-file ->
+  (do (set *lexlist* (read-lexed-file In-file))
+      (init-lexlist-hash (value *lexlist*))
+      (WITH-OPEN-FILE 
+       (STREAM Out-file :DIRECTION :OUTPUT)
+       (FORMAT STREAM "~a~%" (parse)))))
+
+\
+(load "/home/kjetil/impfaust/tostring.qi") 
+(read-lexed-file "/tmp/impfaust_lexed.lsp")
+
+
+Evaluate this line:
+*************************************************
+(das-main "/tmp/impfaust_lexed.lsp" "/tmp/hepp.dsp")
+****************************************************
+
+
+(das-main "/home/kjetil/faudiostream/compiler/parser/temp/test8_lexed.lsp" "/tmp/hepp.dsp")
+(track put-class-variables)
+(track parse-class-0)
+(track parse-class)
+(track parse-class-0)
+(track transform-class-method)
+(untrack parse-0)
+(track transform-class)
+(get-hash (value *class-defs*) "c___AllPass")
+
+(MAPHASH PPRINT (value *class-defs*))
+
+(newline)
+(parse)
+(load "/home/kjetil/impfaust/imperativ_faust.qi")
+(dump "/home/kjetil/impfaust/imperativ_faust.qi")
+(LOAD "/home/kjetil/faudiostream/compiler/parser/temp/test8_lexed.lsp")
+(set *lexlist* (GET-LEXLIST))
+(save)
+(startup)
+(untrack nth-cdr)
+(track parse-fe)
+(track parse-method-args)
+(track parse-method-body)
+(track parse-code)
+(track eat-specific-token)
+(track parse-0)
+(track parse-fe)
+(number? (string->number "3"))
+(do
+ (track parse-class-0)
+ (parse))
+
+(if (not (= 1 1))
+    (print "hepp")
+    (print "gakk"))
+\
+
