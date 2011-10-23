@@ -10,7 +10,7 @@ ABOUT
 This program extends faust expressions with the "class" statement.
 
 Inside a "class", you can write signal processing code
-which reminds a bit like Java or C++.
+which reminds a bit of Java or C++.
 
 
 
