@@ -1,0 +1,248 @@
+
+
+Classes can only contain objects of previously defined types
+============================================================
+
+Illegal:
+
+"
+class A{
+  B b;
+}
+class B{
+...
+}
+"
+
+Also illegal:
+
+"
+class A{
+  A a;
+}
+"
+
+
+
+
+Illegal to return more than one signal from normal methods.
+===========================================================
+
+  Example:
+
+"
+class A{
+    ret(){return 2,3;}
+}
+
+class B{
+    A a;
+    process(){return a.ret();}
+}
+
+process = B;
+"
+
+A faust error complaining about wrong number of inputs/outputs to sequential composition will show up:
+
+"
+Error in sequential composition (A:B)
+The number of outputs (5) of A = [#1>[#2>[#3>[#4>0,2,3,0,1]]]]~(_,_,_,_)
+must be equal to the number of inputs (4) of B : _,_,_,!:[#5>[#6>[#7>#6]]]
+"
+
+However, it is possible to return more than one signal if the method
+is not called from another method (which only makes sense in the 'process' method).
+Example:
+
+"
+class A{
+  process(){return 2,3;}
+}
+
+process = A;
+"
+
+This limitation is probably possible to fix, but it requires some restructuring of the compiler.
+The main problem is that Poing Imperatif doesn't know the number of input or output signals
+of faust expressions.
+
+
+
+Local class variables (except class arguments) can not be used for array size
+==============================================================================
+
+Illegal:
+"
+class Array{
+    int size=4;
+    float buf[size]=1.0;
+}
+"
+
+The reason is that all class variables are also recursive variables.
+Recursive variables can not be used as size parameter for 'rwtable' in faust.
+
+Legal:
+"
+class Array(int size){   // 'size' moved here.
+    float buf[size]=1.0;
+}
+"
+
+Also legal:
+"
+int size=4;  // 'size' moved here.
+class Array{
+    float buf[size]=1.0;
+}
+"
+
+
+
+Class arguments used for definining array size are resetted to their original value for each sample iteration
+==============================================================================================================
+
+Example:
+
+"
+class Array(int size){
+    float buf[size];
+    process(){
+        size += 1;
+        return size;
+    }
+}
+process = Array(5);
+"
+
+...will output 6 6 6 6 6 6 6 ..., and not
+6 7 8 9 10 11 12 ... .
+
+The reason is that since Faust doesn't allow recursive variables
+to be used as size parameter for 'rwtable', all variables used
+as size parameters are resetted for each sample iteration so
+that they don't have to be recursive.
+
+
+
+Wrong array value if index variable doesn't start with 0.
+==========================================================
+
+The following example shows unexpected behavour:
+
+"
+size=2;
+class Array{
+    float buf[size]=1.0;
+    process(int i){
+        float a = buf[i%size];
+        buf[i%size] = a+1.0;
+        return a,i%size;
+    }
+}
+counter = +(1) ~ _ ;
+process = counter,Array(counter);
+
+// faust-imp --keep -a plot.cpp testing/array.dsp >temp.cpp && g++ temp.cpp && ./a.out 
+"
+
+
+I don't know why the second 'a' is 0.0.
+Looking at the generated faust code, it could seem like it should have been 1.0
+but I haven't studied it closely enough yet.
+
+
+
+A method can not return a function
+==================================
+
+Although functions can be used as arguments to classes and methods,
+methods can not return functions.
+
+Illegal:
+"
+a(b)=b;
+class A{
+  process(){
+    return a;
+  }
+}
+"
+
+
+Objects can not be arguments to methods or classes
+==================================================
+
+Although this limitation is already specified in the syntax diagram,
+it's repeated here as well.
+
+Illegal:
+
+"
+class A{
+  val=5;
+}
+Class B{
+  A a;
+  getval(a){       // (1) Illegal
+    return a.val;
+  }
+  process(){
+    return getval(a); // (2) Illegal
+  }
+}
+"
+
+Legal:
+
+"
+class A{
+  val=5;
+}
+Class B{
+  A a;
+  getval(){         // (1) Legal
+    return a.val;
+  }
+  process(){
+    return getval(); // (2) Legal
+  }
+}
+"
+
+
+Objects can not be declared inside methods
+==========================================
+
+Although this limitation is already specified in the syntax diagram,
+it's repeated here as well.
+
+Illegal:
+
+"
+class A{
+  val=5;
+}
+class B{
+  process(){
+    A a;            // (1) Illegal
+    return a.val;
+  }
+}
+"
+
+Legal:
+
+"
+class A{
+  val=5;
+}
+class B{
+  A a;             // (1) Legal
+  process(){
+    return a.val;
+  }
+}
+"
+

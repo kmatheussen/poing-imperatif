@@ -1,0 +1,57 @@
+    
+
+EBNF diagram
+------------
+
+class        = "class" classname ["(" [var_list] ")"]
+               "{"
+                   {class_elem}
+               "}" .
+
+var_list     = var {"," var} .
+var          = [number_type] varname .
+number_type  = "int" | "float" .
+
+class_elem   = array_decl | object_decl | method | imp_code .
+
+array_decl   = number_type arrayname "[" expr "]" ["=" expr] ";" .
+object_decl  = classname objectname ["(" [expr] ")"] ";" .
+method       = [number_type] methodname "(" [var_list] ")"
+               "{"
+                  {imp_code} 
+               "}" .
+
+expr         = faust_expression | inc_assign | dec_assign | class
+             | method_call | object_var | array_ref .
+(* Inside classes, faust expressions are extended to expr! *)
+
+object_var   = objectname "." varname .
+array_ref    = arrayname "[" expr "]" .
+
+imp_code     = method_call ";" | block | single_decl 
+             | if | return | assignment .
+
+method_call  = [objectname | "this"] "." methodname "(" [expr] ")" .
+block        = "{" {imp_code} "}" .
+single_decl  = number_type name_list ["=" expr] ";" .
+if           = "if" "(" expr ")" imp_code ["else" imp_code] .
+return       = "return" expr ";" .
+
+assignment   = set_assign | inc_assign | dec_assign 
+             | cni_assign | obvar_set | array_set .
+set_assign   = name_list "=" expr ";" .
+inc_assign   = name "+" "+" ";" | "+" "+" name ";"  .
+dec_assign   = name "-" "-" ";" | "-" "-" name ";"  .
+cni_assign   = name assign_op "=" expr ";" .
+assign_op    = "+" | "-" | "*" | "/"  .
+obvar_set    = objectname "." varname "=" expr ";" .
+array_set    = arrayname "[" expr "]" "=" expr ";" .
+
+classname    = name .
+varname      = name .
+arrayname    = name .
+objectname   = name .
+methodname   = name .
+
+name_list    = name {"," name} .
+name         = alpha, {alpha | digit | "_"} .
