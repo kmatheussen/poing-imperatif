@@ -1,0 +1,60 @@
+
+Poing Imperatif V0.0.7
+Released 2011-04-26
+Kjetil S. Matheussen
+
+
+
+ABOUT
+-----
+This program extends faust expressions with the "class" statement.
+
+Inside a "class", you can write signal processing code
+which reminds a bit like Java or C++.
+
+
+
+
+INSTALL
+-------
+To compile poing imperatif, the following three tools are needed:
+
+1. Faust - http://faust.grame.fr
+2. Either:
+   a) CLISP - http://clisp.sf.net (recommended, more stable)
+   b) SBCL  - http://www.sbcl.org (slightly lower compilation time than clisp)
+3. Qi    - http://www.lambdassociates.org
+
+It is not necessary to compile and install Qi before compiling Poing Imperatif.
+Just unpack the source, and set the QIDIR variable in Poing Imperatif's makefile.
+
+
+HISTORY
+-------
+0.0.6 -> 0.0.7
+* Really fixed method calls.
+* Properly cast int and float method args.
+* Added another example: The am_pitchshift LADSPA plugin by Steve Harris,
+  translated to Point Imperatif.
+
+
+0.0.5 -> 0.0.6
+* Fixed method calls where "this" is the object name.
+
+
+0.0.4 -> 0.0.5
+* Supports a.b++ / a.b--; 
+* "class A{process(n){return n;}}" ->
+     A(n)=n;
+  instead of
+     A(n)=n with{};
+* A few more tests.
+
+
+ACKNOWLEDGMENT
+--------------
+Funded by Integra, a 3-year project part-funded
+by the Culture programme of the European
+Commission.
+
+
