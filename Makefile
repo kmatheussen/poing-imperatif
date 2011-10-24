@@ -76,13 +76,16 @@ poing-imperatif-compiler_sbcl: QiLisp/Qi.core make_compiler_sbcl.qi poing-impera
 	echo "(load \"`pwd`/make_compiler_sbcl.qi\")" | $(SBCL) --control-stack-size 128 --core QiLisp/Qi.core
 	mv /tmp/poing-imperatif-compiler poing-imperatif-compiler
 
-QiLisp/Qi.mem:
+QiLisp/Qi.mem: QiLisp
 	cp $(QIDIR)/Lisp/*.lsp QiLisp/
 	cd QiLisp/ && $(CLISP) -C -i install.lsp
 
-QiLisp/Qi.core:
+QiLisp/Qi.core: QiLisp
 	cp $(QIDIR)/Lisp/*.lsp QiLisp/
 	cd QiLisp/ && $(SBCL) --load install.lsp
+
+QiLisp:
+	mkdir -p QiLisp
 
 faust-imp: poing-imperatif
 	ln -s poing-imperatif faust-imp
