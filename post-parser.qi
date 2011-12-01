@@ -1,4 +1,174 @@
 
+(define pp-parse-0
+  [A | As] Class Callback  <- (Callback [A | As] Class)
+  [A | As] Class Callback ->  [(pp-parse-0 A Class Callback) | (pp-parse-0 As Class Callback)]
+  A        _     _        ->  A)
+
+(define pp-parse 
+  []                       _        -> []
+  [class Name Args | Code] Callback -> [class Name Args | (pp-parse-0 Code Name Callback)]
+  [A | As]                 Callback -> [(pp-parse A Callback) | (pp-parse As Callback)]
+  A                        _        -> A)
+
+
+
+
+\
+Various faust expressions
+\
+
+\ Array access. \
+(define pp-array-ref
+  Name Pos -> [expr "rwtable("
+                    (<_> [Name "__size"]) ", "
+                    (<_> [Name "__init"]) ", "
+                    (<_> [Name "__pos"])  ", "
+                    (<_> [Name "__val"])  ", "
+                    Pos "))"])
+
+
+
+\
+Simplify method calls /etc. into the "call" primitive:
+
+  * call   -> A faust function call.
+              First argument is the name of the function to call,
+              second argument is the return variables, and the
+              third argument is the arguments for the function.
+
+It would be possible to collapse "call" into [set vars [expr ...]].
+However, a special call primitive makes it easier to later identify
+and remove unused variables.
+
+
+Example 1:
+
+class Bank{
+   int sum;
+   void debit(int add){
+     sum += add;
+   }
+}
+
+Method call:
+[method-call bank___debit 50]
+->
+[block
+ [set! bank___add 50]
+ [call bank___debit [bank___sum bank___add bank___retnum] [bank___sum bank___add bank___retnum]]]
+
+
+Example 2:
+
+class Bank{
+   int sum;
+   int debit(int add){
+     sum += add;
+     return sum;
+   }
+}
+
+Method get call:
+[method-call-get sum2 bank___debit [expr "50"]]
+->
+[block
+ [set! bank___add [expr "50"]]
+ [call bank___debit          [bank___sum bank___add bank___retnum] [bank___sum bank___add bank___retnum]]
+ [call bank___debit___return [sum2]                                [bank___sum bank___add bank___retnum]]]
+ 
+
+Example 3:
+
+class Bank{
+   int sum;
+   int debit(int add,int add2){
+     sum += add+add3;
+     return sum;
+   }
+}
+
+Method get call:
+[method-call-get sum2 bank___debit [expr "50" "," "90"]]
+->
+[block
+ [set! [bank___add bank___add2] [expr "50" "," "90"]   ]
+ [call bank___debit          [bank___sum bank___add bank___add2 bank___retnum] [bank___sum bank___add bank___add2 bank___retnum]]
+ [call bank___debit___return [sum2]                                            [bank___sum bank___add bank___add2 bank___retnum]]]
+\
+
+(define pp-simplify-calls-callback
+  [method-call false [slot | Method-path] Args] Class -> (let Method-args   (get-method-args Method-path)
+                                                      Class-vars    (get-class-vars Class)
+                                                      [block
+                                                       [set! Method-args Args]
+                                                       [call (path->methodname Method-path) Class-vars Method-args]])
+  [method-call Ret-var Method Args] Class -> (let Method-return (get-method-return-name Method)
+                                                      Method-args   (get-method-args Method)
+                                                      [block
+                                                       (pp-simplify-calls-callback [method-call false Method Args] Class)
+                                                       [call Method-return Ret-var Method-args]])
+  _ _ -> #\Escape)
+
+
+(define pp-simplify-calls
+  As -> (pp-parse As pp-simplify-calls-callback))
+
+
+\
+Reduce [slot ...] into simple variable names.
+\
+
+(define pp-remove-slot-callback
+\  [method-call [slot | Path] Args] Class      -> [method-call Path (pp-remove-slot-callback Args Class)]
+  [method-call-get Ret-var Method Args] Class -> [method-call Path (pp-remove-slot-callback Args Class)]
+\
+  [slot | Path] Class -> (path->varname Path)
+  _             _     -> #\Escape)
+
+(define pp-remove-slot
+  As -> (pp-parse As pp-remove-slot-callback))
+
+ 
+
+
+\
+Reduce the number of operations by replacing
+statements such as pre++, pre-- and cni-assign
+with lower-level alternatives.
+\
+
+(define pp-simplify
+  [cni-assign Name Op Expr]             -> [set! Name [expr Name Op Expr]]
+  [post--- Name]                        -> [set! Name [expr Name - 1]]
+  [pre---  Name]                        -> [set! Name [expr Name - 1]]
+  [post-++ Name]                        -> [set! Name [expr Name + 1]]
+  [pre-++  Name]                        -> [set! Name [expr Name + 1]]
+  [array-cni-set! Name Op Pos Val]      -> [array-set! Name Pos [expr (pp-array-ref Name Pos)
+                                                                   Op
+                                                                   Val]]
+  [A|As]                                -> [(pp-simplify A)|(pp-simplify As)]
+  A                                     -> A)
+
+
+\
+(pp-simplify [block
+              [cni-assign [slot a] + [expr [slot how_much]]]
+              [decl single int [c]]
+              [decl single int [a b] [expr "90" "," "100"]]])
+
+(track pp-parse)
+(untrack pp-simplify)
+(do (init-peak)
+    (post-parser (snd (<program> peak 0))))
+
+(pp-simplify (fix-expr [class g []
+                              [block 
+                               [if [expr [e-pre-++ bufidx] >= bufsize]
+                                   [block
+                                    [set! bufidx [expr [e-pre--- gakk]]]
+                                    [array-cni-set! Table + [e-pre-++ pos] [expr 2.3]]]]]]))
+\
+
 
 
 \
@@ -15,22 +185,16 @@ the parser.
 
 (set *expr-elems* [])
 (define push-expr
-  Expr Return -> (do (set *expr-elems* [Expr | (value *expr-elems*)])
-                     Return))
+  Expr -> (set *expr-elems* [Expr | (value *expr-elems*)]))
 
 (define fix-expr
-  [e-pre-++ Name]                    -> (push-expr [pre++ Name] Name)
-  [e-pre--- Name]                    -> (push-expr [pre++ Name] Name)
-  [e-method-call Object Method Args] -> (let Var (gensym (<-> Object "_callget_res"))
-                                          (push-expr [object-call-get Var Object Method (fix-expr Args)]
-                                                     Var))
-  [e-object-var Object Slot]         -> (let Var (gensym (<-> Object "_get_res"))
-                                          (push-expr [object-get Var Object Slot]
-                                                     Var))
-  [e-array-ref Array Pos]            -> (<-> "rwtable(" Array "__size, " Array "__init, " Array "__pos, " Array "__val, (" 
-                                             (tail (fix-expr Pos)) 
-                                             "))")
-
+  [e-pre-++ Name]             -> (do (push-expr [pre-++ Name]) Name)
+  [e-pre--- Name]             -> (do (push-expr [pre-++ Name]) Name)
+  [e-method-call Method Args] -> (let Var (gensym (<-> Method "_callget_res"))
+                                      (do (push-expr [method-call Var Method (fix-expr Args)])
+                                          Var))
+  [e-array-ref Array Pos]     -> (pp-array-ref Array (fix-expr Pos))
+  
   [Method-elem|Ms] -> (let Old-elms (value *expr-elems*)
                            Result   (do (set *expr-elems* [])
                                         [Method-elem | (fix-expr Ms)])
@@ -41,7 +205,7 @@ the parser.
                                    (let Hepp (reverse New-elms)
                                      [block ,Hepp Result]))))
   
-  where (element? Method-elem [method-call single-decl if return set! multi-set!
+  where (element? Method-elem [method-call single-decl if return set!
                                cni-assign obvar-set array-set! array-cni-set!])
 
   [A | As] -> [(fix-expr A) | (fix-expr As)]
@@ -49,10 +213,18 @@ the parser.
   A        -> A)
 
 \
-(track fix-expr)
+(untrack fix-expr)
 (fix-expr [block 
            [if [expr [e-pre-++ bufidx] ">=" "bufsize"]
-               [set! bufidx [expr [e-pre--- "gakk"]]]]])
+               [block
+                [set! bufidx1 [expr [e-pre--- "variable"]]]
+                [set! bufidx2 [expr [e-array-ref "table" [expr "90"]]]]]]])
+
+(fix-expr [block 
+           [if [expr [e-pre-++ bufidx] ">=" "bufsize"]
+               [block
+                [set! bufidx [expr [e-pre--- "gakk"]]]
+                [array-cni-set! Table + [expr [e-pre-++ "pos"]] [expr 2.3]]]]])
           
 \
 
@@ -89,45 +261,54 @@ It probably makes no significant difference in performance though.
                                           [block [block a b] c d [block [block e f]]]
                                           [if [expr [e-pre-++ bufidx] ">=" "bufsize"]
                                               [set! bufidx [expr [e-pre--- "gakk"]]]]]))
+(remove-unneeded-blocks (pp-simplify (fix-expr [block 
+                                                [if [expr [e-pre-++ bufidx] ">=" "bufsize"]
+                                                    [block
+                                                     [set! bufidx [expr [e-pre--- "gakk"]]]
+                                                     [array-cni-set! "table" + [e-pre-++ "pos"] [expr 2.3]]]]])))
+
 \
 
-
-(define gen-initrepeat-method
-  []                                   -> []
-  [[object-decl Type Name Val] | Rest] -> [[method-call Name ___initrepeat (<-> Args " : " (get-___initrepeat-args-filter Type))]
-                                           | (gen-initrepeat-method Rest)] where (is-initrepeat___-required? Type) 
-                                           \ "where ..." is there to avoid something like this: "(one_signal : (!))". \
-  [_                           | Rest] -> (gen-initrepeat-method Rest))
-
-
-(define gen-init-method
-  []                                   -> []
-  [[array _ Name _ Val]        | Rest] -> [[set! (<_> (<-> Name __val)) Val] | (gen-init-method Rest)] where (not (element? Val [0 0.0 "0" "0.0"]))
-  [[single-decl Type Names Val]| Rest] -> [[set! Names Val] | (gen-init-method Rest)] where (not (element? Val [0 0.0 "0" "0.0"]))
-  [[object-decl Type Name Val ]| Rest] -> [[method-call Name ___init Val] | (gen-init-method Rest)]
-  [_                           | Rest] -> (gen-init-method Rest))
 
 \
 (do (init-peak)
-    (transform-class-gen-init-methods (remove-unneeded-blocks (fix-expr (snd (<program> peak 0))))))
+    (gen-init-method (remove-unneeded-blocks (fix-expr (snd (<program> peak 0))))))
+
+(track gen-init-method)
+(do (init-peak)
+    (gen-init-method (head (remove-unneeded-blocks (fix-expr (snd (<program> peak 0)))))))
+
+(do (init-peak)
+    (remove-unneeded-blocks (pp-simplify (fix-expr (snd (<program> peak 0))))))
 
 (do (init-peak)
     (remove-unneeded-blocks (fix-expr (snd (<program> peak 0)))))
 
-(gen-init-method [[single-decl int [bufidx]]
-                  [array float buffer [expr "bufsize"] 0.0]
-                  [single-decl int [b] 5]
-                  [object-decl c__Bank bank 50]
-                  [method process [[unknown input]]
-                          ]])
-
-(gen-initrepeat-method [[single-decl int [bufidx]]
-                        [array float buffer [expr "bufsize"] 0.0]
-                        [single-decl int [b] 5]
-                        [object-decl c__Bank bank 50]
-                        [method process [[unknown input]]
-                                ]])
-
-
-(track transform-class-gen-init-method)
 \
+
+(define post-parser
+  Program -> (remove-unneeded-blocks 
+              (pp-remove-slot
+               (pp-simplify-calls
+                (handle-vars
+                 (pp-simplify 
+                  (fix-expr Program)))))))
+
+
+\
+(do (init-peak)
+    (post-parser (snd (<program> peak 0))))
+(do (init-peak)
+    (snd (<program> peak 0)))
+
+(parser-compile <expr-par> ["bank" "." "a" ")"])
+(parser-compile <slot> ["bank" "." "a"])
+(parser-compile <expr-element> ["bank" "." "a"])
+(track <expr-element>)
+(track <slot>)
+(untrack <expr>)
+(untrack add-vars)
+(untrack pp-parse-0)
+(untrack pp-simplify-callback)
+\
+

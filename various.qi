@@ -1,0 +1,13 @@
+
+
+\ Returns key if key not in Table.
+  Returns the value (out of [key value] pairs) if the key is in the table.
+\
+(define assoc-value
+  Key Table -> (let Hit (assoc Key Table)
+                 (if (empty? Hit)
+                     Key
+                     (nth 2 Hit))))
+
+
+

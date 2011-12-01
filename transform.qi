@@ -1,0 +1,74 @@
+
+\
+
+Transforms from prefix poing imperatif to prefix faust.
+
+\
+
+
+
+
+
+
+(define gen-initrepeat-method
+  []                                   -> []
+  [[object-decl Type Name Val] | Rest] -> [[method-call Name ___initrepeat (<-> Args " : " (get-___initrepeat-args-filter Type))]
+                                           | (gen-initrepeat-method Rest)] where (is-initrepeat___-required? Type) 
+                                           \ "where ..." is there to avoid something like this: "(one_signal : (!))". \
+  [_                           | Rest] -> (gen-initrepeat-method Rest))
+
+
+(define gen-init-method
+  []                                   -> []
+  [[array _ Name _ Val]        | Rest] -> [[set! (<_> (<-> Name __val)) Val] | (gen-init-method Rest)] where (not (element? Val [0 0.0 "0" "0.0"]))
+  [[single-decl Type Names Val]| Rest] -> [[set! Names Val] | (gen-init-method Rest)] where (not (element? Val [0 0.0 "0" "0.0"]))
+  [[object-decl Type Name Val ]| Rest] -> [[method-call Name ___init Val] | (gen-init-method Rest)]
+  [_                           | Rest] -> (gen-init-method Rest))
+
+
+\
+(gen-init-method [[single-decl int [bufidx]]
+                  [array float buffer [expr "bufsize"] 0.0]
+                  [single-decl int [b] 5]
+                  [object-decl c__Bank bank 50]
+                  [method process [[unknown input]]
+                          ]])
+
+(gen-initrepeat-method [[single-decl int [bufidx]]
+                        [array float buffer [expr "bufsize"] 0.0]
+                        [single-decl int [b] 5]
+                        [object-decl c__Bank bank 50]
+                        [method process [[unknown input]]
+                                ]])
+
+(track transform-class-gen-init-method)
+\
+
+(define add-init-methods
+  [class Name Args | Code] -> (let Initrepeat-code (gen-initrepeat-method Code)
+                                   Init-code       (gen-init-method Code)
+                                   (do (if (cons? Init-code)
+                                           (add-required-init___-method Name)
+                                           false)
+                                       [class Name Args
+                                              [method ___initrepeat [] | Initrepeat-code]
+                                              [method ___init       [] | Init-code]
+                                              | Code]))
+  [A | As]       -> [(add-init-methods A) | (add-init-methods As)]
+  A              -> A)
+
+
+\
+(track add-init-methods)
+(untrack gen-init-method)
+(untrack gen-initrepeat-method)
+(track add-required-init___-method)
+(do (init-peak)
+    (add-init-methods (post-parser (snd (<program> peak 0)))))
+\
+
+
+
+
+
+

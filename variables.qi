@@ -1,0 +1,432 @@
+\
+Used by post-parser.
+\
+
+
+\************************************************************
+ ************************************************************
+  Conversions between:
+  * path: [bank sum]
+  * varname: bank___sum
+  * methodname: Bank___sum
+ ************************************************************
+ ************************************************************\
+
+(set *class-vars* (make-hash-table))
+
+(set *varnames* (make-hash-table))
+
+(define path->varname
+  [this  | Path] -> (path->varname Path)
+  [Path1 | Path] -> (let Varname (<_> [Path1 | (zip (make-list (length Path) "___") Path)])
+                      (do (set-hash (value *varnames*) Varname [Path1 | Path])
+                          Varname)))
+  
+(define varname->path
+  Varname -> (get-hash (value *varnames*) Varname))
+
+(define path->methodname
+  Class [Name]      -> (get-type Class Name)
+  Class [Name|Path] -> (path->methodname (get-type Class Name) Path))
+
+(define varname->methodname
+  Class Varname -> (path->methodname Class (varname->path Varname)))
+
+\
+(path->varname [this bank sum])
+(path->varname [bank sum])
+(path->varname [this sum])
+(path->varname [sum])
+(varname->path bank___sum)
+(varname->path sum)
+(track path->methodname)
+\
+
+  
+
+
+
+\************************************************************
+ ************************************************************
+  Store variables (both name and types) for classes and methods.
+ ************************************************************
+ ************************************************************\
+
+(set *class-vars* (make-hash-table))
+
+\******\
+
+(define get-class-vars
+  Class -> (get-hash (value *class-vars*) Class))
+
+(define get-class-var
+  Class Var-name -> (assoc Var-name (get-class-vars Class)))
+
+\ Note that the input format is [Type Name], while the output format (from get-class-var) is [Name Type].
+  The reason is that [Type Name] is the order used in poing imperatif, while [Name Type]
+  is simpler to look up in an assoc list.
+\
+(define add-class-var
+  Class [Type Name] -> (let Vars (get-hash (value *class-vars*) Class)
+                         (set-hash (value *class-vars*) Class [[Name Type] | Vars])))
+
+\******\
+
+(define get-type
+  Class Var-name -> (let Var (get-class-var Class Var)
+                      (if (empty? Var)
+                          (parse-error 0 (<-> "Unknown variable '" Var-name "' in class '" Class "'."))
+                          (nth 2 Var))))
+
+(define get-method-name
+  Class Method -> (<_> [Class "___" Method]))
+
+(define get-method-return-name
+  Method-name -> (<_> [Method-name "____return"]))
+
+
+(set *method-args* (make-hash-table))
+
+(define get-method-args
+  Method-name -> (get-hash (value *method-args*) Method-name))
+
+(define set-method-args
+  Class-name Method-name Args -> (set-hash (value *method-args*)
+                                           (get-method-name Class-name Method-name)
+                                           Args))
+
+
+
+\************************************************************
+ ************************************************************
+  The function 'handle-vars' does the following:
+  1. Uniqify. Make sure all variable names are unique to avoid name clashes.
+  2. Extract for later usage: 
+      * class variables
+      * variable types
+      * method arguments
+  3. Rename methods to their faust function names.
+ ************************************************************
+ ************************************************************\
+
+(define get-unique-name
+  A Vars -> (let Hit (assoc A Vars)
+              (if (empty? Hit)
+                  A
+                  (nth 2 Hit))))
+\
+(get-unique-name a [[a a2]])
+\
+
+(set *unique-counter* 0)
+
+(define get-unique-number
+  -> (set *unique-counter* (+ 1 (value *unique-counter*))))
+
+(define uniqify-name
+  Name -> (let Unique-number (get-unique-number)
+            (<_> (<-> Name "____" Unique-number))))
+
+(define add-vars
+  New Old -> (append (map (/. Name
+                              (let Unique-number (get-unique-number)
+                                   Unique-name   (<_> (<-> Name "_" Unique-number))
+                                   [Name Unique-name]))
+                          New)
+                     Old))
+\
+(add-vars [a] [[b b2]])
+\
+
+(define handle-vars-0
+  [class Class Args | Code]        _     Vars -> (let Vars (add-vars (map (nth 2) Args) 
+                                                                     Vars)
+                                                   [class  Class (handle-vars-0 Args Class Vars)
+                                                           | (handle-vars-0 Code Class Vars)])
+  [method Name Args | Code]        Class Vars -> (let Vars (add-vars (map (nth 2) Args)
+                                                                     Vars)
+                                                   [method (get-method-name Class Name) (handle-vars-0 Args Class Vars)
+                                                           | (handle-vars-0 Code Class Vars)])
+  
+  [[Decl Type Name | Rest] | Code] Class Vars -> (let New-vars (add-vars (if (cons? Name) Name [Name]) 
+                                                                         Vars)
+                                                   [[Decl Type (handle-vars-0 Name Class New-vars)
+                                                          | (handle-vars-0 Rest Class Vars)] 
+                                                    | (handle-vars-0 Code Class New-vars)])
+  where (element? Decl [single-decl array-decl object-decl])
+
+  [A|As] Class Vars -> [(handle-vars-0 A Class Vars) | (handle-vars-0 As Class Vars)]
+  A      _     Vars -> (get-unique-name A Vars))
+
+(define handle-vars
+  As -> (handle-vars-0 As false []))
+
+\
+(track handle-vars-0)
+(track add-vars)
+(handle-vars [class g [[unknown b]]
+                    [single-decl int [b] 50]])
+
+(handle-vars [class g [[unknown b]]
+                    [single-decl int [b] 50]
+                    [method m [[unknown b]]
+                            [block 
+                             [print b]
+                             [single-decl int [a b c] b]
+                             [if [expr [e-pre-++ bufidx] >= bufsize + [method-call this m 90]]
+                                 [block
+                                  [set! bufidx [expr [e-pre--- a]]]
+                                  [array-cni-set! Table + [e-pre-++ pos] [expr b]]]]]]])
+\
+
+
+
+\
+[[class c___Var []
+        [single-decl int [a]]]
+ [class c___Bank [[int b]] 
+        [object-decl c___Var var]
+        [single-decl int [a]]
+        [method add [[int how_much]]
+                [object-decl c___Var var]
+                [single-decl int [b] [expr [slot var a]]]
+                [method-call var hepp [expr "90"]]
+                [set! [slot a] [expr [slot a] + [slot b] [expr [slot how_much]]]]]]
+ [class c___UseBank []
+        [object-decl c___Bank bank []]
+        [method process [[unknown input]]
+                [method-call false [slot bank add] [expr [slot input]]]
+                [return [expr [slot bank var a]]]]]
+ "counter" "=" "+" "(" "1" ")" "~" "_" ";" "process" "=" "counter" ","
+ "c___UseBank" "(" "counter" ")" ";"]
+
+->
+
+[[class c___Var []
+        [single-decl int [a]]]
+ [class c___Bank [[int b]]
+        [object-decl c___Var var]
+        [single-decl int [a]]
+        [method add [[int how_much_10]]
+                [object-decl c___Var var_11]
+                [single-decl int [b] [expr var_11___a]]
+                [method-call c___Var___hepp [expr "90"]]
+                [set! a [expr a + b_11 [expr how_much_10]]]]]
+ [class c___UseBank [] 
+        [object-decl c___Bank bank []]
+        [method process [[unknown input_11]]
+                [method-call false c___Bank___add [expr input_11]]
+                [return [expr bank___var___a]]]]
+ "counter" "=" "+" "(" "1" ")" "~" "_" ";" "process" "=" "counter" ","
+ "c___UseBank" "(" "counter" ")" ";"]
+\
+
+
+\ 
+'Methodvars' is 'false' outside method bodies.
+\
+(define handle-vars-0
+  [class Class Args | Code]         _     _         _     -> [class Class Args | (handle-vars-0 Code
+                                                                                                Class
+                                                                                                (map (cons single)
+                                                                                                     (map reverse Args))
+                                                                                                false)]
+  [[method Name Args| Body] | Code] Class Classvars false -> [[method Name Args | (handle-vars-0 Body
+                                                                                                 Class
+                                                                                                 [,Classvars ,(map (cons single)
+                                                                                                                   (map reverse Args))]
+                                                                                                 (map (/. Name
+                                                                                                          [(uniqify-name Name) Name])
+                                                                                                      (map (nth 2) Args)))]
+                                                              | (handle-vars-0 Code Class Classvars false)]
+  [[decl T1 T2 Name | Rest] | Code] Class Classvars false -> [[decl T1 T2 Name | (handle-vars-0 Class Classvars false)]
+                                                              | (handle-vars-0 Code
+                                                                               Class
+                                                                               [[Name T1 T2]|Classvars]
+                                                                               false)]
+  [[decl T2 T2 Name | Rest] | Code] Class Classvars Methodvars -> (handle-vars-0 [[decl T1 T2 Name | Rest]|Code]
+                                                                                 Class
+                                                                                 [[Name T1 T2]|Classvars]
+                                                                                 [[(uniqify-name Name) Name]|Methodvars])
+
+  [method-call Retvars Slot Args] Class Classvars Methodvars-> 
+                                                            
+  [slot Path1 | Path]             Class Classvars Methodvars -> (path->varname [(assoc-value Path1 Methodvars) | Path])
+  [A|As] Class Classvars Methodvars -> [(handle-vars-0 A Class Classvars Methodvars) | (handle-vars-0 As Classvars Methodvars)]
+  A      _     Classvars Methodvars -> (get-unique-name A Vars))
+
+
+
+(define extract-class-types
+  [class Name Args | Body]  -> (set-hash (value *class-types*) Name [,(map reverse Args) ,(extract-class-types Body)])
+  [method Name Args | Body] -> [,(map reverse Args) ,(extract-class-types Body)]
+  [decl T1 Type Name]       -> [[Name Type]]
+  [A|As]                     -> [,(extract-class-types A) ,(extract-class-types As)]
+  _                          -> [])
+
+  
+(define extract-class-vars
+  [class Name Args | Body]   -> (set-hash (value *class-vars*) Name [,(map (nth 2) Args) ,(extract-class-vars Body)])
+  [method Name Args | Body]  -> [,(map (nth 2) Args) ,(extract-class-vars Body)]
+  [decl single Type Name]    -> [Name]
+  [decl object Type Name |_] -> (let Class-vars (get-hash (value *class-vars*) Type)
+                                  (if (empty? Class-vars)
+                                      (parse-error 0 (<-> "Unknown class '" Type "'."))
+                                      (map (/. Varname (<_> [Name "___" Varname]))
+                                           (map (nth 2) Class-vars))))
+  [A|As]                     -> [,(extract-class-vars A) ,(extract-class-vars As)]
+  _                          -> [])
+  
+
+\
+(track parse-error)
+(track extract-class-vars)
+(do (extract-class-vars (pp-uniqify [[class c___Var []
+                                            [decl single int a]]
+                                     [class c___Bank [[int b]] 
+                                            [decl object c___Var var]
+                                            [decl single int a]
+                                            [method add [[int how_much]]
+                                                    [decl object c___Var var]
+                                                    [decl single int b]
+                                                    [set! b [expr [slot var a]]]
+                                                    [method-call [slot var hepp] [expr "90"]]
+                                                    [set! [slot a] [expr [slot a] + [slot b] [expr [slot how_much]]]]]]
+                                     [class c___UseBank []
+                                            [decl object c___Bank bank []]
+                                            [method process [[unknown input]]
+                                                    [method-call false [slot bank add] [expr [slot input]]]
+                                                    [return [expr [slot bank var a]]]]]
+                                     "counter" "=" "+" "(" "1" ")" "~" "_" ";" "process" "=" "counter" ","
+                                     "c___UseBank" "(" "counter" ")" ";"]))
+    (print [c___Var (get-hash (value *class-vars*) c___Var) (newline)])
+    (print [c___Bank (get-hash (value *class-vars*) c___Bank)(newline)])
+    (print [c___UseBank (get-hash (value *class-vars*) c___UseBank)(newline)])
+    [])
+
+(do
+ (print [c___Var (get-hash (value *class-vars*) c___Var) (newline)])
+ (print [c___Bank (get-hash (value *class-vars*) c___Bank)(newline)])
+ (print [c___UseBank (get-hash (value *class-vars*) c___UseBank)(newline)])
+ [])
+
+
+
+                        
+                        \  
+
+
+
+\
+ Uniqify method variables and method arguments.
+ In order to more simply compile this:
+ class A{
+   int a;
+   void b(int a){
+     this.a = a;
+     ...
+   }
+   ...
+ }
+\
+(define pp-uniqify-0
+  [method Name Args | Body]   _       -> (let Renamed (map (/. Name
+                                                               [Name (uniqify-name Name)])
+                                                           (map (nth 2) Args))
+                                           [method Name (zip (map (nth 1) Args)
+                                                             (map (/. Name (assoc-value Name Renamed))
+                                                                  (map (nth 2) Args)))
+                                                   | (pp-uniqify-0 Body Renamed)])
+  [A|As]                     false   -> [(pp-uniqify-0 A false) | (pp-uniqify-0 As false)]
+  [[decl T1 T2 Name] | Code] Renamed -> (let New-name (uniqify-name Name)
+                                          [[decl T1 T2 New-name] 
+                                           | (pp-uniqify-0 Code [[Name New-name] | Renamed])])
+  [slot Path1 | Path]        Renamed -> [slot (assoc-value Path1 Renamed) | Path]
+  [A|As]                     Renamed -> [(pp-uniqify-0 A Renamed)|(pp-uniqify-0 As Renamed)]
+  A                          _       -> A)
+
+(define pp-uniqify
+  As -> (pp-uniqify-0 As false))
+   
+\
+(track assoc-value)
+(untrack pp-uniqify-0)
+(untrack pp-simplify-decl)
+(pp-uniqify
+ (pp-simplify-decl
+  [[class c___Var []
+          [decl single int [a]]]
+   [class c___Bank [[int b]] 
+          [decl object c___Var var]
+          [decl single int [a]]
+          [method add [[int how_much]]
+                  [decl object c___Var var]
+                  [decl single int [b] [expr [slot var a]]]
+                  [block
+                   [decl single int [b]]
+                   [slot b]]
+                  [method-call [slot var hepp] [expr "90"]]
+                  [set! [slot a] [expr [slot a] + [slot b] [expr [slot how_much]]]]]]
+   [class c___UseBank []
+          [decl object c___Bank bank []]
+          [method process [[unknown input]]
+                  [method-call false [slot bank add] [expr [slot input]]]
+                  [return [expr [slot bank var a]]]]]
+   "counter" "=" "+" "(" "1" ")" "~" "_" ";" "process" "=" "counter" ","
+   "c___UseBank" "(" "counter" ")" ";"]))
+
+\
+
+
+\
+[decl single int [a b] [expr something]]
+-> [decl single int a]
+   [decl single int b]
+   [set! [a b] [expr something]]
+
+[decl array float table 50 2.3]
+-> [decl single int table___size]
+   [decl single float table___init]
+   [decl single int table___pos]
+   [decl single float table___val]
+   [set! table___val 2.3]
+   [set! table___init table___val]
+   [set! table___size 50]
+\
+
+(define pp-simplify-decl
+  [[decl single Type Names|Value]|Rest] -> [,(map (/. Name
+                                                      [single Type Name])
+                                                  Names)
+                                             ,(if (empty? Value)
+                                                  []
+                                                  [[set! Names | Value]])
+                                              ,(pp-simplify-decl Rest)]
+  [[decl array Type Name Size Init]|Rest] -> [[decl single int  (<_> [Name "___size"])]
+                                              [decl single Type (<_> [Name "___init"])]
+                                              [decl single int  (<_> [Name "___pos"])]
+                                              [decl single Type (<_> [Name "___val"])]
+                                              ,(if (or (= 0 Init) (= 0.0 Init)
+                                                       (= [expr "0"] Init)
+                                                       (= [expr "0.0"] Init))
+                                                   []
+                                                   [[set! [slot (<_> [Name "___val"])] Init]
+                                                    [set! [slot (<_> [Name "___init"])] [slot (<_> [Name "___val"])]]])
+                                               [set! [slot (<_> [Name "___size"])] Size]
+                                               ,(pp-simplify-decl Rest)]
+  [A|As]                                -> [(pp-simplify-decl A)|(pp-simplify-decl As)]
+  A                                     -> A)
+
+\
+(pp-simplify-decl [block
+                   [decl array float table 50 2.3]
+                   [decl single int [c]]
+                   [decl single int [a b] [expr "90" "," "100"]]])
+\
+
+
+\
+(do (init-peak)
+    (pp-simplify 
+     (snd (<program> peak 0))))
+\
